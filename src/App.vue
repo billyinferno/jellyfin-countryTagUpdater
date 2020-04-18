@@ -1,28 +1,31 @@
 <template>
   <div id="app">
-    <img alt="Vue logo" src="./assets/logo.png">
-    <HelloWorld msg="Welcome to Your Vue.js App"/>
+    <CountryTagUpdater />
   </div>
 </template>
 
 <script>
-import HelloWorld from './components/HelloWorld.vue'
+import CountryTagUpdater from './components/CountryTagUpdater.vue';
 
 export default {
   name: 'App',
   components: {
-    HelloWorld
-  }
+    CountryTagUpdater
+  },
 }
 </script>
 
 <style>
-#app {
-  font-family: Avenir, Helvetica, Arial, sans-serif;
+body, html {
+  font-family: Helvetica, Arial, sans-serif;
+  font-size: 14px;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  text-align: center;
-  color: #2c3e50;
-  margin-top: 60px;
+  color: #f1f1f1;
+  background-color: #363636;
+}
+
+#app {
+  margin: 30px;
 }
 </style>
