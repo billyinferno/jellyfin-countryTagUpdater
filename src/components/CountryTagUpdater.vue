@@ -46,7 +46,7 @@
                     <el-button :disabled="isGetMovieLoading || isFetchingTMDB || isUpdateMetadata" :loading="isGetMovieLoading" type="primary" round style="width:100%;" v-on:click="getMovie">Get Movie</el-button>
                 </el-col>
                 <el-col :span="8">
-                    <el-button :disabled="(jfMovieList.length <= 0) || isGetMovieLoading || isFetchingTMDB || isUpdateMetadata" :loading="isFetchingTMDB" type="primary" round style="width:100%;" v-on:click="forceRefreshTMDB">Force TMDB</el-button>
+                    <el-button :disabled="(jfMovieList.length <= 0) || isGetMovieLoading || isFetchingTMDB || isUpdateMetadata || tmdbAPI === ''" :loading="isFetchingTMDB" type="primary" round style="width:100%;" v-on:click="forceRefreshTMDB">Force TMDB</el-button>
                 </el-col>
                 <el-col :span="8">
                     <el-button :disabled="(jfMovieList.length <= 0) || isGetMovieLoading || isFetchingTMDB || isUpdateMetadata" :loading="isUpdateMetadata" type="primary" round style="width:100%;" v-on:click="forceUpdateMetadata">Update Tag</el-button>
@@ -58,8 +58,12 @@
         </div>
         <div id="resultTable" class="tableContainer">
             <!-- the table result -->
-            <el-table :data="displayResult" v-loading="isGetMovieLoading" height="480px" style="width:100%;" :row-class-name="getRowClassName">
-                <el-table-column fixed prop="name" label="NAME" width="400"></el-table-column>
+            <el-table :data="displayResult" v-loading="isGetMovieLoading" height="480px" style="width:100%;">
+                <el-table-column fixed label="NAME" width="400">
+                    <template slot-scope="scope">
+                        {{ scope.row.name }}&nbsp;<i v-if="scope.row.tag_exist" class="el-icon-success successIcon"></i>
+                    </template>
+                </el-table-column>
                 <el-table-column prop="tmdb" label="TMDB" width="85"></el-table-column>
                 <el-table-column prop="imdb" label="IMDB" width="85"></el-table-column>
                 <el-table-column label="COUNTRY" width="320">
@@ -129,14 +133,6 @@ export default {
         // ----------------------------------
         // ----- COMPONENT MANIPLUATION -----
         // ----------------------------------
-        // eslint-disable-next-line no-unused-vars
-        getRowClassName({row, rowIndex}) {
-            // check if the isTag from current rowIndex
-            if(this.jfMovieList[rowIndex].isTagExists) {
-                return 'tag-exist-row';
-            }
-            return '';
-        },
         formatProgressBar() {
             if(this.numMovieScanned >= this.totalMovie) {
                 return 'Complete';
@@ -563,7 +559,7 @@ export default {
             // set the loading into true
             this.isGetMovieLoading = true;
 
-            if (this.jfURL === '' || this.jfUsername === '' || this.jfAPI === '' || this.tmdbAPI === '') {
+            if (this.jfURL === '' || this.jfUsername === '' || this.jfAPI === '') {
                 // there are fields that not yet being filled, generate the error message
                 var errorMessage = '';
                 if(this.jfURL === '') {
@@ -998,6 +994,10 @@ export default {
     vertical-align: bottom;
 }
 
+.successIcon {
+    color: rgb(0, 209, 45);
+}
+
 .copyrightNote {
     margin-top: 10px;
     text-align: center;
@@ -1101,9 +1101,5 @@ export default {
     stroke-width: 2;
     stroke: #FF4040;
     stroke-linecap: round;
-}
-
-.el-table .tag-exist-row {
-    background: #e7ffda;
 }
 </style>
