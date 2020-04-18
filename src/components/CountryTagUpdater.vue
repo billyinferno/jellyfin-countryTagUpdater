@@ -58,7 +58,7 @@
         </div>
         <div id="resultTable" class="tableContainer">
             <!-- the table result -->
-            <el-table :data="displayResult" v-loading="isGetMovieLoading" height="480px" style="width:100%;">
+            <el-table :data="displayResult" v-loading="isGetMovieLoading" height="480px" style="width:100%;" :row-class-name="getRowClassName">
                 <el-table-column fixed prop="name" label="NAME" width="400"></el-table-column>
                 <el-table-column prop="tmdb" label="TMDB" width="85"></el-table-column>
                 <el-table-column prop="imdb" label="IMDB" width="85"></el-table-column>
@@ -117,19 +117,26 @@ export default {
         }
     },
     computed: {
+        // -----------------------------
+        // ----- DATA MANIPULATION -----
+        // -----------------------------
         displayResult() {
-            // return with formatted movie list
+            // return with formatted movie list #TODO
             return this.jfMovieList;
-        },
-        // component manipulation
-        showPopover(index) {
-            if(index === this.currentIndex) {
-                return true;
-            }
-            return false;
         },
     },
     methods: {
+        // ----------------------------------
+        // ----- COMPONENT MANIPLUATION -----
+        // ----------------------------------
+        // eslint-disable-next-line no-unused-vars
+        getRowClassName({row, rowIndex}) {
+            // check if the isTag from current rowIndex
+            if(this.jfMovieList[rowIndex].isTagExists) {
+                return 'tag-exist-row';
+            }
+            return '';
+        },
         formatProgressBar() {
             if(this.numMovieScanned >= this.totalMovie) {
                 return 'Complete';
@@ -138,6 +145,9 @@ export default {
                 return ''+this.numMovieScanned + '/' + this.totalMovie;
             }
         },
+        // ---------------------------
+        // ----- HELPER FUNCTION -----
+        // ---------------------------
         showMsg(msg, typ) {
             this.$message({
                 message: msg,
@@ -207,6 +217,18 @@ export default {
                     break;
             }
         },
+        // -------------------------
+        // ----- MAIN FUNCTION -----
+        // -------------------------
+        /**
+         * getUserList
+         * This function will perform API call to Jellyfin to get the userid that will be used
+         * to perform any fetch and update on the metadata.
+         * 
+         * Return:
+         * - true if success
+         * - false if failed
+         *  */ 
         async getUserList() {
             var urlUserList = this.jfProto + this.jfURL + '/Users/';
             this.printlog('info', "Get User List from: " + urlUserList);
@@ -251,6 +273,15 @@ export default {
                 return false;
             }
         },
+        /**
+         * getItemList
+         * This function will perform API call to get the Parent ID of the folder that we will
+         * list and perform update on the metadata.
+         * 
+         * Return:
+         * - true if success
+         * - false if failed
+         */
         async getItemList() {
             var urlItemList = this.jfProto + this.jfURL + '/Items?UserId=' + this.jfUserID;
             this.printlog('info', "Get Item List for user: " + this.jfUsername + " (" + this.jfUserID + ")");
@@ -282,6 +313,11 @@ export default {
                                 }
                             }
                         }
+
+                        // if we reached here, it means that the folder is not exists
+                        // showed message to user.
+                        this.showMsg("Folder " + this.jfFolder + " is not exist in library.", 'warning');
+                        return false;
                     }
                     else {
                         this.printlog('warn', "<getItemList> - No collection");
@@ -300,6 +336,21 @@ export default {
                 return false;
             }
         },
+        /**
+         * getMovieDetails
+         * This function will perform API call to get the detail information of the movie, that will be
+         * used as base data when we want to check what kind of metadata being stored on the movie it self.
+         * 
+         * The metadata response here will be later mapped to be used as reference for the existing fields
+         * that we don't want to touch/update.
+         * 
+         * Argumenst:
+         * - movieID : the ID of the movie that we will look on the library
+         * 
+         * Return:
+         * - movie detail in JSON format if success
+         * - null if failed
+         */
         async getMovieDetails(movieID) {
             var urlMovieDetail = this.jfProto + this.jfURL + '/Users/' + this.jfUserID + '/Items/' + movieID + '/';
             
@@ -322,6 +373,19 @@ export default {
                 return null;
             }
         },
+        /**
+         * getMovieList
+         * This function will get list of the movies on the folder based on the user id and parent id that
+         * already got before.
+         * 
+         * The movie will be put on the array and sorted based on the movie name before further processing.
+         * 
+         * End result of this function is to filled the Jellyfin Movie List variable that will be used as
+         * a reference for all the processing of this application.
+         * 
+         * Return:
+         * N/A
+         */
         async getMovieList() {
             var urlMovieList = this.jfProto + this.jfURL + '/Items?UserId=' + this.jfUserID + '&ParentId=' + this.jfParentID;
             this.printlog('info', "Get Movie List from from " + this.jfFolder + " (" + this.jfParentID + ") start at " + Date().toString());
@@ -478,6 +542,22 @@ export default {
                 return false;
             }
         },
+        /**
+         * getMovie
+         * This function is used to perform all the function needed to get the Jellyfin Library specified
+         * on the web interface.
+         * 
+         * Below is the function that being called when Get Movie button is pressed:
+         * - getUserList
+         *   - getItemList
+         *     - getMovieList
+         *       - getMovieDetails for each movie in getMovieList
+         * 
+         * All the validation will be handled by each other function.
+         * 
+         * Return:
+         * N/A
+         */
         async getMovie() {
             this.printlog('info', "Get Movie from Jellyfin");
             // set the loading into true
@@ -514,8 +594,24 @@ export default {
             // set the loading into false, since we already finished
             this.isGetMovieLoading = false;
         },
+        /**
+         * forceUpdateMetadata
+         * This function will perform update to all movie metadata that loaded by the tools.
+         * On the process this function will call updateMetadata function for each movie loaded.
+         * 
+         * Return:
+         * N/A
+         */
         async forceUpdateMetadata() {
             this.printlog('info', "Perform update to ALL Metadata");
+
+            // since will refresh A LOT of data, ensure to ask first user, that they
+            // really want to do this.
+            if(!(confirm("Do you want to refresh all " + this.totalMovie.toString() + " metadata?"))) {
+                // user doesn't want to refresh all, abort!
+                return;
+            }
+
             // here we will call the update metadata for each record that we want to update
             this.isUpdateMetadata = true;
 
@@ -532,6 +628,26 @@ export default {
             // once finished set back the isUpdateMetadata flag to false
             this.isUpdateMetadata = false;
         },
+        /**
+         * updateMetadata
+         * This function is to format the body and post the metadata update to Jellyfin API.
+         * 
+         * For the basic information, we will get the details of the movie as reference value, before we perform
+         * any update on the movie.
+         * 
+         * Here all the country tags that need to be put will be also formatted and created here.
+         * 
+         * For any data that doesn't have any countries, the update post will be skipped to save IO.
+         * 
+         * Params:
+         * - index : Index of the movie on the Jellyfin Movie List parameter
+         * - conf : confirmation enable or not? This is due this function can be called individually
+         *          or thru update all metadata button. So we shouldn't ask any confirmation to user
+         *          if user access this function thru Update Tag button.
+         * 
+         * Return:
+         * N/A
+         */
         async updateMetadata(index, conf) {
             // if confirm is true, it means that it was update individually
             if(conf) {
@@ -657,8 +773,25 @@ export default {
             // if confirm is true, set back the isFetchingMetadata into false
             if(conf) { this.isUpdateMetadata = false; }
         },
+        /**
+         * forceRefreshTMDB
+         * This function will perform TMDB API call to all movie metadata that loaded by the tools.
+         * 
+         * Since we will access external sites, the program will perform 0.5s delay for each API call
+         * to prevent hammering on TMDB server.
+         * 
+         * Return:
+         * N/A
+         */
         async forceRefreshTMDB() {
-            const sleep = m => new Promise(r => setTimeout(r, m))
+            const sleep = m => new Promise(r => setTimeout(r, m));
+
+            // since will refresh A LOT of data, ensure to ask first user, that they
+            // really want to do this.
+            if(!(confirm("Do you want to refresh all " + this.totalMovie.toString() + " from TMDB?"))) {
+                // user doesn't want to update, abort!
+                return;
+            }
 
             // show log when we start the task
             this.printlog('info', "Perform TMDB refresh to all Movie List");
@@ -681,6 +814,20 @@ export default {
             // once done reset back the fetching status into false
             this.isFetchingTMDB = false;
         },
+        /**
+         * fetchTMDB
+         * This function will perform API call to TMDB to get the information of the movie based on the TMDB
+         * ID that being stored on the movie metadata.
+         * 
+         * Once got the data from TMDB, program will perform any checking necessary, and later will
+         * populate the country list to the current Jellyfin Movie Library data.
+         * 
+         * Params:
+         * - index : Index number of the movie being processed
+         * - tmdb : TMDB ID of the movie
+         * - conf : confirmation enable or not? This is due this function can be called individually
+         *          or thru Force TMDB button.
+         */
         async fetchTMDB(index, tmdb, conf) {
             // if confirm is true, it means this is being triggered individually
             // set the isFetchingTMDB into true here
@@ -724,6 +871,17 @@ export default {
                                 // get the countries, and put on the array
                                 productionCountries.push(res.data.production_countries[i].name);
                             }
+
+                            // in case that productionCountries is 0, then check if use want to continue or not?
+                            if(productionCountries.length <= 0) {
+                                if(conf) {
+                                    if(!(confirm('There are no production countries for ' + this.jfMovieList[index].name))) {
+                                        return;
+                                    }
+                                }
+                                this.printlog('warn', "Movie " + this.jfMovieList[index].name + " production countries is empty from TMDB");
+                            }
+
                             // assigned this array to the movie list
                             this.jfMovieList[index].raw_country = productionCountries;
                             this.jfMovieList[index].country = productionCountries.join(', ');
@@ -742,6 +900,14 @@ export default {
             // once done check if this is confirm or not? if confirm, then set back the isFetchingTMDB into false
             if(conf) { this.isFetchingTMDB = false; }
         },
+        /**
+         * removeTag
+         * This function will remove the tag from the Jellyfin Movie List variable.
+         * 
+         * Params:
+         * - index : Index of the movie in Jellyfin Movie List variable.
+         * - tag : The Tag name that will be removed.
+         */
         removeTag(index, tag) {
             // pop the tag arrays, and recreate the country that need to be displayed?
             this.printlog('info', "Delete Tag (" + tag + ") from Movie (" + this.jfMovieList[index].name + ")");
@@ -765,6 +931,14 @@ export default {
                 this.jfMovieList[index].country = updatedCountry;
             }
         },
+        /**
+         * handleInputTagConfirm
+         * This function is used to handle the input fields that will be used to add the new tag to
+         * Jellyfin Movie List.
+         * 
+         * Params:
+         * - index : Index of the movie in Jellyfin Movie List variable.
+         */
         handleInputTagConfirm(index) {
             if(this.inputTagValue.trim().length > 0) {
                 this.printlog('info', "Add Tag (" + this.inputTagValue + ") to Movie (" + this.jfMovieList[index].name + ")");
@@ -798,30 +972,30 @@ export default {
 }
 
 .submitForm {
-  width: 500px;
-  margin: auto;
+    width: 500px;
+    margin: auto;
 }
 
 .tableContainer {
-  width: 1000px;
-  margin: auto;
+    width: 1000px;
+    margin: auto;
 }
 
 .formRow {
-  margin-bottom: 10px;
+    margin-bottom: 10px;
 }
 
 .tagAddButton {
-  width: 20px;
-  height: 20px;
-  margin-left: 5px;
-  padding: 0px;
+    width: 20px;
+    height: 20px;
+    margin-left: 5px;
+    padding: 0px;
 }
 
 .inputNewTag {
-  width: 180px;
-  margin: 10px;
-  vertical-align: bottom;
+    width: 180px;
+    margin: 10px;
+    vertical-align: bottom;
 }
 
 .copyrightNote {
@@ -832,14 +1006,14 @@ export default {
 }
 
 .el-select .el-input {
-  width: 110px;
+    width: 110px;
 }
 
 .el-input-group__prepend {
-  background-color: rgb(70, 70, 70);
-  color: #fff;
-  width: 100px;
-  border: 0px;
+    background-color: rgb(70, 70, 70);
+    color: #fff;
+    width: 100px;
+    border: 0px;
 }
 
 .el-table td, .el-table th {
@@ -929,53 +1103,7 @@ export default {
     stroke-linecap: round;
 }
 
-.el-tabs__header {
-    padding: 0;
-    position: relative;
-    margin: 0 0 1px;
-}
-
-.el-tabs--card > .el-tabs__header {
-    border-bottom: 1px solid #4F4F4F;
-}
-
-.el-tabs--card > .el-tabs__header .el-tabs__item.is-active {
-    border-bottom-color: #FF4040;
-}
-
-.el-tabs--card > .el-tabs__header .el-tabs__item {
-    border-bottom: 1px solid transparent;
-    border-left: 1px solid #4F4F4F;
-    transition: color .3s cubic-bezier(.645,.045,.355,1),padding .3s cubic-bezier(.645,.045,.355,1);
-}
-
-.el-tabs--card > .el-tabs__header .el-tabs__nav {
-    border: 1px solid #4F4F4F;
-    border-bottom: none;
-    border-radius: 4px 4px 0 0;
-    box-sizing: border-box;
-}
-
-.el-tabs__item {
-    padding: 0 20px;
-    height: 40px;
-    box-sizing: border-box;
-    line-height: 40px;
-    display: inline-block;
-    list-style: none;
-    font-size: 14px;
-    font-weight: 500;
-    color: #f1f1f1;
-    position: relative;
-    background-color: rgb(70, 70, 70);
-}
-
-.el-tabs__item:hover {
-    color: #FF4040;
-    cursor: pointer;
-}
-
-.el-tabs__item.is-active {
-    color: #FF4040;
+.el-table .tag-exist-row {
+    background: #e7ffda;
 }
 </style>
