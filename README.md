@@ -20,5 +20,9 @@ yarn build
 yarn lint
 ```
 
+### After Installation
+Update your jellyfin-web filterdialog.
+Follow the step on the Wiki pages.
+
 ### Customize configuration
 See [Configuration Reference](https://cli.vuejs.org/config/).
