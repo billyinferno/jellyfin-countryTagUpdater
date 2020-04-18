@@ -68,7 +68,7 @@
                 <el-table-column prop="imdb" label="IMDB" width="85"></el-table-column>
                 <el-table-column label="COUNTRY" width="320">
                     <template slot-scope="scope">
-                        <el-tag v-for="tag in scope.row.raw_country" :key="tag" type="info" closable size="mini" @close="removeTag(scope.$index, tag)">{{tag}}</el-tag>
+                        <el-tag v-for="tag in scope.row.country" :key="tag" type="info" closable size="mini" @close="removeTag(scope.$index, tag)">{{tag}}</el-tag>
                         <el-popover placement="top" title="Add Tags" width="200" trigger="click">
                             <el-input class="inputNewTag" v-model="inputTagValue" size="mini" @keyup.enter.native="handleInputTagConfirm(scope.$index)" @blur="handleInputTagConfirm(scope.$index)"></el-input>
                             <el-button slot="reference" type="info" class="tagAddButton">+</el-button>
@@ -78,7 +78,7 @@
                 <el-table-column fixed="right" label="ACTION" width="90">
                     <template slot-scope="scope">
                         <el-button :disabled="isGetMovieLoading || (scope.row.tmdb === '') || isUpdateMetadata || isFetchingTMDB || tmdbAPI === ''" :loading="isFetchingTMDB" type="primary" icon="el-icon-refresh" v-on:click="fetchTMDB(scope.$index, scope.row.tmdb, true)" size="mini" circle></el-button>
-                        <el-button :disabled="isGetMovieLoading || (scope.row.country === '') || isUpdateMetadata || isFetchingTMDB" :loading="isUpdateMetadata" type="primary" icon="el-icon-upload2" v-on:click="updateMetadata(scope.$index, true)" size="mini" circle></el-button>
+                        <el-button :disabled="isGetMovieLoading || (scope.row.country.length <= 0) || isUpdateMetadata || isFetchingTMDB" :loading="isUpdateMetadata" type="primary" icon="el-icon-upload2" v-on:click="updateMetadata(scope.$index, true)" size="mini" circle></el-button>
                     </template>
                 </el-table-column>
             </el-table>
@@ -394,7 +394,6 @@ export default {
                 var isSkipped;
                 var providerIdTMDB;
                 var providerIdIMDB;
-                var productionLocations;
                 var rawProductionLocation;
                 var currentTags;
                 var i,j;
@@ -459,7 +458,6 @@ export default {
                                 // ProductionLocations
                                 providerIdTMDB = '';
                                 providerIdIMDB = '';
-                                productionLocations = '';
                                 rawProductionLocation = [];
                                 currentTags = [];
                                 if (!(det===null)) {
@@ -480,7 +478,6 @@ export default {
                                         for(j=0; j<currentTags.length; j++) {
                                             rawProductionLocation.push(currentTags[j].replace('🌍', '').trim());
                                         }
-                                        productionLocations = rawProductionLocation.join(', ');
                                     }
                                     else {
                                         // tags is not yet exists, populate from production location
@@ -488,7 +485,6 @@ export default {
                                             // check if production locations more than 0
                                             if(det.ProductionLocations.length > 0) {
                                                 // join all array with ","
-                                                productionLocations = det.ProductionLocations.join(', ');
                                                 rawProductionLocation = det.ProductionLocations;
                                             }
                                         }
@@ -500,8 +496,7 @@ export default {
                                     "id":res.data.Items[i].Id,
                                     "tmdb":providerIdTMDB,
                                     "imdb":providerIdIMDB,
-                                    "country":productionLocations,
-                                    "raw_country":rawProductionLocation,
+                                    "country":rawProductionLocation,
                                     "current_tags":currentTags
                                 });
                             }
@@ -655,10 +650,10 @@ export default {
             // first ensure that the country is not empty for this one, if empty then just skip
             var updatedTag = [];
             var i, j;
-            if(this.jfMovieList[index].raw_country.length > 0) {
+            if(this.jfMovieList[index].country.length > 0) {
                 // generate the updatedTag for this movie
-                for(i=0; i<this.jfMovieList[index].raw_country.length; i++) {
-                    updatedTag.push("🌍 " + this.jfMovieList[index].raw_country[i]);
+                for(i=0; i<this.jfMovieList[index].country.length; i++) {
+                    updatedTag.push("🌍 " + this.jfMovieList[index].country[i]);
                 }
 
                 // now check if we need to append the tags or not?
@@ -879,8 +874,7 @@ export default {
                             }
 
                             // assigned this array to the movie list
-                            this.jfMovieList[index].raw_country = productionCountries;
-                            this.jfMovieList[index].country = productionCountries.join(', ');
+                            this.jfMovieList[index].country = productionCountries;
                         }
                         else {
                             this.printlog('error', "<fetchTMDB> - Error when connecting to TMDB with status: " + res.status);
@@ -908,23 +902,18 @@ export default {
             // pop the tag arrays, and recreate the country that need to be displayed?
             this.printlog('info', "Delete Tag (" + tag + ") from Movie (" + this.jfMovieList[index].name + ")");
 
-            if(this.jfMovieList[index].raw_country.length > 0) {
+            if(this.jfMovieList[index].country.length > 0) {
                 // loop thru all the the tags and add the one that not being removed
                 var updatedTags = [];
-                var updatedCountry = '';
                 
-                for(var i=0; i<this.jfMovieList[index].raw_country.length; i++) {
-                    if(!(this.jfMovieList[index].raw_country[i] === tag)) {
-                        updatedTags.push(this.jfMovieList[index].raw_country[i]);
+                for(var i=0; i<this.jfMovieList[index].country.length; i++) {
+                    if(!(this.jfMovieList[index].country[i] === tag)) {
+                        updatedTags.push(this.jfMovieList[index].country[i]);
                     }
                 }
-                // once finished, generate the updated country
-                if(updatedTags.length > 0) {
-                    updatedCountry = updatedTags.join(', ');
-                }
+
                 // once done, then update the current movie list
-                this.jfMovieList[index].raw_country = updatedTags;
-                this.jfMovieList[index].country = updatedCountry;
+                this.jfMovieList[index].country = updatedTags;
             }
         },
         /**
@@ -943,19 +932,16 @@ export default {
                 // since we need to perform not-case-sensitive on the Tag, hence need to perform loop on the tags
                 // and see if the tag being inputted is the same or not?
                 var currentTag = this.inputTagValue.toLowerCase();
-                for(var i=0; i<this.jfMovieList[index].raw_country.length; i++) {
-                    if(this.jfMovieList[index].raw_country[i].toLowerCase() === currentTag) {
+                for(var i=0; i<this.jfMovieList[index].country.length; i++) {
+                    if(this.jfMovieList[index].country[i].toLowerCase() === currentTag) {
                         this.printlog('info', "Tag (" + this.inputTagValue + " already exists in Movie (" + this.jfMovieList[index].name + ")");
                         return;
                     }
                 }
 
                 // if we passed the check above, it means that it's safe to add the tag on the list
-                this.jfMovieList[index].raw_country.push(this.inputTagValue);
+                this.jfMovieList[index].country.push(this.inputTagValue);
                 this.inputTagValue = '';
-
-                // generate the country once we add the new tag
-                this.jfMovieList[index].country = this.jfMovieList[index].raw_country.join(', ');
             }
         },
     }
