@@ -20,6 +20,16 @@ yarn build
 yarn lint
 ```
 
+### Electron for development
+```
+yarn electron:serve
+```
+
+### Build Electron App
+```
+yarn electron:build
+```
+
 ### After Installation
 Update your jellyfin-web filterdialog.
 Follow the step on the Wiki pages.
