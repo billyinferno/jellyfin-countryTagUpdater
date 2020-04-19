@@ -53,22 +53,22 @@
                 </el-col>
             </el-row>
         </div>
-        <div id="progressBar" class="submitForm formRow">
+        <div id="progressBar" class="tableContainer formRow">
             <el-progress :text-inside="true" :stroke-width="24" :percentage="currentProgress" style="width:100%;" :format="formatProgressBar"></el-progress>
         </div>
-        <div id="resultTable" class="tableContainer">
+        <div id="resultTable" class="tableContainer formRow">
             <!-- the table result -->
-            <el-table :data="displayResult" v-loading="isGetMovieLoading" height="480px" style="width:100%;">
+            <el-table :data="jfDisplayList" v-loading="isGetMovieLoading || isPageChange" height="480px" style="width:100%;">
                 <el-table-column fixed label="NAME" width="400">
-                    <template slot-scope="scope">
+                    <template v-slot:default="scope">
                         {{ scope.row.name }}&nbsp;<i v-if="scope.row.tag_exist" class="el-icon-success successIcon"></i>
                     </template>
                 </el-table-column>
                 <el-table-column prop="tmdb" label="TMDB" width="85"></el-table-column>
                 <el-table-column prop="imdb" label="IMDB" width="85"></el-table-column>
                 <el-table-column label="COUNTRY" width="320">
-                    <template slot-scope="scope">
-                        <el-tag v-for="tag in scope.row.country" :key="tag" type="info" closable size="mini" @close="removeTag(scope.$index, tag)">{{tag}}</el-tag>
+                    <template v-slot:default="scope">
+                        <el-tag v-for="tag in scope.row.country" :key="tag" type="info" disable-transitions closable size="mini" @close="removeTag(scope.$index, tag)">{{tag}}</el-tag>
                         <el-popover placement="top" title="Add Tags" width="200" trigger="click">
                             <el-input class="inputNewTag" v-model="inputTagValue" size="mini" @keyup.enter.native="handleInputTagConfirm(scope.$index)" @blur="handleInputTagConfirm(scope.$index)"></el-input>
                             <el-button slot="reference" type="info" class="tagAddButton">+</el-button>
@@ -76,12 +76,15 @@
                     </template>
                 </el-table-column>
                 <el-table-column fixed="right" label="ACTION" width="90">
-                    <template slot-scope="scope">
+                    <template v-slot:default="scope">
                         <el-button :disabled="isGetMovieLoading || (scope.row.tmdb === '') || isUpdateMetadata || isFetchingTMDB || tmdbAPI === ''" :loading="isFetchingTMDB" type="primary" icon="el-icon-refresh" v-on:click="fetchTMDB(scope.$index, scope.row.tmdb, true)" size="mini" circle></el-button>
                         <el-button :disabled="isGetMovieLoading || (scope.row.country.length <= 0) || isUpdateMetadata || isFetchingTMDB" :loading="isUpdateMetadata" type="primary" icon="el-icon-upload2" v-on:click="updateMetadata(scope.$index, true)" size="mini" circle></el-button>
                     </template>
                 </el-table-column>
             </el-table>
+        </div>
+        <div id="resultPagination" class="tableContainer formRow">
+            <el-pagination :disabled="isGetMovieLoading || isFetchingTMDB || isUpdateMetadata" background layout="prev, pager, next" :page-size="displayedRecord" :current-page.sync="currentPage" :total="totalMovie" @current-change="handlePageChange"></el-pagination>
         </div>
         <div id="copyrightNote" class="submitForm copyrightNote">
             copyright &copy; 2020 - adimartha/billyinferno
@@ -101,9 +104,9 @@ export default {
             isGetMovieLoading: false,
             isFetchingTMDB: false,
             isUpdateMetadata: false,
+            isPageChange: false,
             getAllMovie: true,
             replaceTags: true,
-            currentIndex: -1,
             totalMovie: 0,
             numMovieScanned: 0,
             currentProgress: 0,
@@ -118,16 +121,11 @@ export default {
             jfServerID: '',
             jfParentID: '',
             jfMovieList: [],
+            jfDisplayList: [],
+            // pagination handling
+            currentPage: 1,
+            displayedRecord: 100,
         }
-    },
-    computed: {
-        // -----------------------------
-        // ----- DATA MANIPULATION -----
-        // -----------------------------
-        displayResult() {
-            // return with formatted movie list #TODO
-            return this.jfMovieList;
-        },
     },
     methods: {
         // ----------------------------------
@@ -140,6 +138,44 @@ export default {
             else {
                 return ''+this.numMovieScanned + '/' + this.totalMovie;
             }
+        },
+        generateDisplayList() {
+            // here we will generate the list that will be displayed on the table.
+            // we can use "computed", but everytimes I used computed it always showed Vue Warn message
+            // even though the "scope-slot" is working correctly (data displayed).
+            //
+            // so instead tinkering with that, I think creating our own method during the handle change
+            // also will resulted to be the same, since there are no absolutely correct way in the
+            // programming also. so, why not?
+
+            // here we need to calcuylate the startIndex and endIndex to knew which data we will need
+            // to be put on the display list.
+            var startIndex = ((this.currentPage - 1) * this.displayedRecord);
+            var endIndex = (this.currentPage * this.displayedRecord);
+            // check if endIndex > totalMovie, because if it's > then just end at totalMovie
+            if (endIndex > this.totalMovie) { endIndex = this.totalMovie; }
+
+            // now make the display list into empty first, before we will fill it later on.
+            this.jfDisplayList = [];
+
+            // after that we can loop from startIndex to endIndex
+            for(var i=startIndex; i<endIndex; i++) {
+                this.jfDisplayList.push(this.jfMovieList[i]);
+            }
+
+            // the page change should be set into false here, because by right it only going to be set
+            // into true only during handlePageChange.
+            this.isPageChange = false;
+        },
+        handlePageChange(val) {
+            // make the table to be looks like it's loading, just for the "eye" pleasure
+            this.isPageChange = true;
+
+            // here we will handle the page changes occurs for the result table
+            this.currentPage = val;
+
+            // call the generateDisplayList to generate the display that we will need to get
+            this.generateDisplayList();
         },
         // ---------------------------
         // ----- HELPER FUNCTION -----
@@ -212,6 +248,13 @@ export default {
                     );
                     break;
             }
+        },
+        getIndex(idx) {
+            // due to pagination the scope.index will return the row number which not actually represent
+            // where is the data being stored on the actual movie list, hence we need to actually compute
+            // the actual index number when the row is being manipulated (eithger add tag, remove tag,
+            // refresh, update, etc).
+            return (((this.currentPage - 1) * this.displayedRecord) + idx);
         },
         // -------------------------
         // ----- MAIN FUNCTION -----
@@ -569,6 +612,10 @@ export default {
                 this.showMsg(errorMessage, 'error');
             }
             else {
+                // initialize the current page here, assuming that we will always start from page = 1
+                // everytime user press the Get Movie button.
+                this.currentPage = 1;
+
                 // first get the username from the list, and check to ensure that this is administrator
                 if(await this.getUserList()) {
                     // we get the user list
@@ -581,6 +628,10 @@ export default {
                     }
                 }
             }
+
+            // once done, and we got all the Movie List, now we can generate the display list based 
+            // on the movie list being generated.
+            this.generateDisplayList();
 
             // set the loading into false, since we already finished
             this.isGetMovieLoading = false;
@@ -631,7 +682,7 @@ export default {
          * For any data that doesn't have any countries, the update post will be skipped to save IO.
          * 
          * Params:
-         * - index : Index of the movie on the Jellyfin Movie List parameter
+         * - idx  : Index of the movie on the Jellyfin Movie List parameter
          * - conf : confirmation enable or not? This is due this function can be called individually
          *          or thru update all metadata button. So we shouldn't ask any confirmation to user
          *          if user access this function thru Update Tag button.
@@ -639,7 +690,9 @@ export default {
          * Return:
          * N/A
          */
-        async updateMetadata(index, conf) {
+        async updateMetadata(idx, conf) {
+            var index = this.getIndex(idx);
+
             // if confirm is true, it means that it was update individually
             if(conf) {
                 this.printlog('info', "Specific metadata Update for " + this.jfMovieList[index].name + " (" + this.jfMovieList[index].id + ")");
@@ -814,12 +867,14 @@ export default {
          * populate the country list to the current Jellyfin Movie Library data.
          * 
          * Params:
-         * - index : Index number of the movie being processed
+         * - idx  : Index number of the movie being processed
          * - tmdb : TMDB ID of the movie
          * - conf : confirmation enable or not? This is due this function can be called individually
          *          or thru Force TMDB button.
          */
-        async fetchTMDB(index, tmdb, conf) {
+        async fetchTMDB(idx, tmdb, conf) {
+            var index = this.getIndex(idx);
+
             // if confirm is true, it means this is being triggered individually
             // set the isFetchingTMDB into true here
             if(conf) {
@@ -895,25 +950,19 @@ export default {
          * This function will remove the tag from the Jellyfin Movie List variable.
          * 
          * Params:
-         * - index : Index of the movie in Jellyfin Movie List variable.
+         * - idx : Index of the movie in Jellyfin Movie List variable.
          * - tag : The Tag name that will be removed.
          */
-        removeTag(index, tag) {
+        removeTag(idx, tag) {
+            var index = this.getIndex(idx);
+
             // pop the tag arrays, and recreate the country that need to be displayed?
             this.printlog('info', "Delete Tag (" + tag + ") from Movie (" + this.jfMovieList[index].name + ")");
 
             if(this.jfMovieList[index].country.length > 0) {
                 // loop thru all the the tags and add the one that not being removed
-                var updatedTags = [];
-                
-                for(var i=0; i<this.jfMovieList[index].country.length; i++) {
-                    if(!(this.jfMovieList[index].country[i] === tag)) {
-                        updatedTags.push(this.jfMovieList[index].country[i]);
-                    }
-                }
-
-                // once done, then update the current movie list
-                this.jfMovieList[index].country = updatedTags;
+                let updatedTags = this.jfMovieList[index].country;
+                this.jfMovieList[index].country = updatedTags.filter((country) => country != tag);
             }
         },
         /**
@@ -922,9 +971,11 @@ export default {
          * Jellyfin Movie List.
          * 
          * Params:
-         * - index : Index of the movie in Jellyfin Movie List variable.
+         * - idx : Index of the movie in Jellyfin Movie List variable.
          */
-        handleInputTagConfirm(index) {
+        handleInputTagConfirm(idx) {
+            var index = this.getIndex(idx);
+
             if(this.inputTagValue.trim().length > 0) {
                 this.printlog('info', "Add Tag (" + this.inputTagValue + ") to Movie (" + this.jfMovieList[index].name + ")");
                 
@@ -985,7 +1036,6 @@ export default {
 }
 
 .copyrightNote {
-    margin-top: 10px;
     text-align: center;
     color: #acacac;
     font-size: 10px;
@@ -1087,5 +1137,14 @@ export default {
     stroke-width: 2;
     stroke: #FF4040;
     stroke-linecap: round;
+}
+
+.el-pagination.is-background .el-pager li:not(.disabled).active {
+    background-color: #FF4040;
+    color: #FFF;
+}
+
+.el-pagination.is-background .el-pager li:not(.disabled):hover {
+    color: #7D0000;
 }
 </style>
