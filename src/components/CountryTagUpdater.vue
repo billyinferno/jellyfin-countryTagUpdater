@@ -3,62 +3,87 @@
         <div id="inputForm" class="submitForm">
             <!-- form start here -->
             <el-row class="formRow">
-                <el-input placeholder="Jellyfin URL" v-model="jfURL" class="input-with-select">
-                    <el-select v-model="jfProto" slot="prepend" placeholder="protocol">
+                <el-input :disabled="isGetMovieLoading || isFetchingTMDB || isUpdateMetadata" placeholder="Jellyfin URL" v-model="jfURL" class="input-with-select">
+                    <el-select :disabled="isGetMovieLoading || isFetchingTMDB || isUpdateMetadata" v-model="jfProto" slot="prepend" placeholder="protocol">
                         <el-option label="http://" value="http://"></el-option>
                         <el-option label="https://" value="https://"></el-option>
                     </el-select>
                 </el-input>
             </el-row>
             <el-row class="formRow">
-                <el-input placeholder="Username" v-model="jfUsername">
+                <el-input :disabled="isGetMovieLoading || isFetchingTMDB || isUpdateMetadata" placeholder="Username" v-model="jfUsername">
                     <template slot="prepend">Username</template>
                 </el-input>
             </el-row>
             <el-row class="formRow">
-                <el-input placeholder="Folder" v-model="jfFolder">
-                    <template slot="prepend">Folder</template>
-                </el-input>
-            </el-row>
-            <el-row class="formRow">
-                <el-input placeholder="Jellyfin API" v-model="jfAPI">
+                <el-input :disabled="isGetMovieLoading || isFetchingTMDB || isUpdateMetadata" placeholder="Jellyfin API" v-model="jfAPI">
                     <template slot="prepend">Jellyfin API Key</template>
                 </el-input>
             </el-row>
-            <el-row class="formRow">
-                <el-input placeholder="TMDB API" v-model="tmdbAPI">
+            <el-row class="formRow el-row el-input el-input-group el-input-group--prepend">
+                <div class="el-input-group__prepend">Folder</div>
+                <el-select :disabled="isGetMovieLoading || isFetchingTMDB || isUpdateMetadata" v-model="jfFolder" placeholder="Select" class="el-select-dark" @change="handleFolderChange">
+                    <el-option v-for="folderItem in folderList" :key="folderItem.name" :label="folderItem.name" :value="folderItem.name"></el-option>
+                </el-select>
+                <el-button :disabled="isGetMovieLoading || isFetchingTMDB || isUpdateMetadata" type="primary" icon="el-icon-refresh" v-on:click="getFolder"></el-button>
+            </el-row>
+            <el-row class="formRow" v-if="folderType === 'movies'">
+                <el-input :disabled="isFetchingTMDB" placeholder="TMDB API" v-model="tmdbAPI">
                     <template slot="prepend">TMDB API Key</template>
                 </el-input>
             </el-row>
-            <el-row class="formRow">
+            <el-row class="formRow" v-if="folderType === 'tvshows'">
+                <el-input :disabled="isFetchingTMDB" placeholder="TVDB API" v-model="tvdbAPI">
+                    <template slot="prepend">TVDB API Key</template>
+                </el-input>
+            </el-row>
+            <el-row class="formRow" v-if="folderType === 'tvshows'">
+                <el-input :disabled="isFetchingTMDB" placeholder="TVDB Username" v-model="tvdbUsername">
+                    <template slot="prepend">TVDB Username</template>
+                </el-input>
+            </el-row>
+            <el-row class="formRow" v-if="folderType === 'tvshows'">
+                <el-input :disabled="isFetchingTMDB" placeholder="TVDB Password" v-model="tvdbUserkey" show-password>
+                    <template slot="prepend">TVDB Password</template>
+                </el-input>
+            </el-row>
+            <el-row class="formRow" v-if="jfFolder !== ''">
                 <el-col :span="8">
-                    <el-checkbox v-model="getAllMovie">Get All Movie</el-checkbox>
+                    <el-tooltip class="item" effect="dark" content="Get all Movies/TV that already tagged?" placement="top-start">
+                        <el-checkbox :disabled="isGetMovieLoading" v-model="getAllItems">Get All Items</el-checkbox>
+                    </el-tooltip>
                 </el-col>
                 <el-col :span="8">
-                    <el-checkbox v-model="replaceTags">Replace Tags</el-checkbox>
+                    <el-tooltip class="item" effect="dark" content="Replace tags data during update?" placement="top-start">
+                    <el-checkbox :disabled="isUpdateMetadata" v-model="replaceTags">Replace Tags</el-checkbox>
+                    </el-tooltip>
                 </el-col>
-                <el-col :span="8">
-                    Total Movies : {{ totalMovie }}
+                <el-col :span="8" v-if="folderType === 'movies'">
+                    Total Movies : {{ totalItem }}
+                </el-col>
+                <el-col :span="8" v-if="folderType === 'tvshows'">
+                    Total TV Shows : {{ totalItem }}
                 </el-col>
             </el-row>
-            <el-row :gutter="20" class="formRow">
+            <el-row :gutter="20" class="formRow" v-if="jfFolder !== ''">
                 <el-col :span="8">
-                    <el-button :disabled="isGetMovieLoading || isFetchingTMDB || isUpdateMetadata" :loading="isGetMovieLoading" type="primary" round style="width:100%;" v-on:click="getMovie">Get Movie</el-button>
+                    <el-button :disabled="isGetMovieLoading || isFetchingTMDB || isUpdateMetadata" :loading="isGetMovieLoading" type="primary" round style="width:100%;" v-on:click="getItem">Get Item</el-button>
                 </el-col>
                 <el-col :span="8">
-                    <el-button :disabled="(jfMovieList.length <= 0) || isGetMovieLoading || isFetchingTMDB || isUpdateMetadata || tmdbAPI === ''" :loading="isFetchingTMDB" type="primary" round style="width:100%;" v-on:click="forceRefreshTMDB">Force TMDB</el-button>
+                    <el-button v-if="folderType==='movies'" :disabled="(jfMovieList.length <= 0) || isGetMovieLoading || isFetchingTMDB || isUpdateMetadata || tmdbAPI === ''" :loading="isFetchingTMDB" type="primary" round style="width:100%;" v-on:click="forceRefresh">Force TMDB</el-button>
+                    <el-button v-if="folderType==='tvshows'" :disabled="(jfMovieList.length <= 0) || isGetMovieLoading || isFetchingTMDB || isUpdateMetadata || tvdbAPI === '' || tvdbUsername === '' || tvdbUserkey === ''" :loading="isFetchingTMDB" type="primary" round style="width:100%;" v-on:click="forceRefresh">Force TVDB</el-button>
                 </el-col>
                 <el-col :span="8">
                     <el-button :disabled="(jfMovieList.length <= 0) || isGetMovieLoading || isFetchingTMDB || isUpdateMetadata" :loading="isUpdateMetadata" type="primary" round style="width:100%;" v-on:click="forceUpdateMetadata">Update Tag</el-button>
                 </el-col>
             </el-row>
         </div>
-        <div id="progressBar" class="tableContainer formRow">
+        <div id="progressBar" class="tableContainer formRow" v-if="jfFolder !== ''">
             <el-progress :text-inside="true" :stroke-width="24" :percentage="currentProgress" style="width:100%;" :format="formatProgressBar"></el-progress>
         </div>
-        <div id="resultTable" class="tableContainer formRow">
+        <div id="resultTable" class="tableContainer formRow" v-if="jfFolder !== ''">
             <!-- the table result -->
-            <el-table :data="jfDisplayList" v-loading="isGetMovieLoading || isPageChange" height="480px" style="width:100%;">
+            <el-table :data="jfDisplayList" v-loading="isGetMovieLoading || isPageChange" height="480px" style="width:100%;" v-if="folderType === 'movies'">
                 <el-table-column fixed label="NAME" width="400">
                     <template v-slot:default="scope">
                         {{ scope.row.name }}&nbsp;<i v-if="scope.row.tag_exist" class="el-icon-success successIcon"></i>
@@ -78,13 +103,42 @@
                 <el-table-column fixed="right" label="ACTION" width="90">
                     <template v-slot:default="scope">
                         <el-button :disabled="isGetMovieLoading || (scope.row.tmdb === '') || isUpdateMetadata || isFetchingTMDB || tmdbAPI === ''" :loading="isFetchingTMDB" type="primary" icon="el-icon-refresh" v-on:click="fetchTMDB(scope.$index, scope.row.tmdb, true)" size="mini" circle></el-button>
-                        <el-button :disabled="isGetMovieLoading || (scope.row.country.length <= 0) || isUpdateMetadata || isFetchingTMDB" :loading="isUpdateMetadata" type="primary" icon="el-icon-upload2" v-on:click="updateMetadata(scope.$index, true)" size="mini" circle></el-button>
+                        <el-button :disabled="isGetMovieLoading || (scope.row.country.length <= 0) || isUpdateMetadata || isFetchingTMDB" :loading="isUpdateMetadata" type="primary" icon="el-icon-upload2" v-on:click="updateMetadataMovie(scope.$index, true)" size="mini" circle></el-button>
+                    </template>
+                </el-table-column>
+            </el-table>
+            <el-table :data="jfDisplayList" v-loading="isGetMovieLoading || isPageChange" height="480px" style="width:100%;" v-if="folderType === 'tvshows'">
+                <el-table-column fixed label="NAME" width="300">
+                    <template v-slot:default="scope">
+                        {{ scope.row.name }}&nbsp;<i v-if="scope.row.tag_exist" class="el-icon-success successIcon"></i><i v-if="scope.row.unknown_studio" class="el-icon-question unknownIcon"></i><i v-if="scope.row.studio_empty" class="el-icon-error errorIcon"></i>
+                    </template>
+                </el-table-column>
+                <el-table-column prop="tmdb" label="TVDB" width="85"></el-table-column>
+                <el-table-column prop="imdb" label="IMDB" width="85"></el-table-column>
+                <el-table-column label="STUDIO" width="195">
+                    <template v-slot:default="scope">
+                        <el-tag v-for="tag in scope.row.studio" :key="tag" type="info" disable-transitions size="mini" @close="removeTag(scope.$index, tag)">{{tag}}</el-tag>
+                    </template>
+                </el-table-column>
+                <el-table-column label="COUNTRY" width="225">
+                    <template v-slot:default="scope">
+                        <el-tag v-for="tag in scope.row.country" :key="tag" type="info" disable-transitions closable size="mini" @close="removeTag(scope.$index, tag)">{{tag}}</el-tag>
+                        <el-popover placement="top" title="Add Tags" width="200" trigger="click">
+                            <el-input class="inputNewTag" v-model="inputTagValue" size="mini" @keyup.enter.native="handleInputTagConfirm(scope.$index)" @blur="handleInputTagConfirm(scope.$index)"></el-input>
+                            <el-button slot="reference" type="info" class="tagAddButton">+</el-button>
+                        </el-popover>
+                    </template>
+                </el-table-column>
+                <el-table-column fixed="right" label="ACTION" width="90">
+                    <template v-slot:default="scope">
+                        <el-button :disabled="isGetMovieLoading || (scope.row.tmdb === '') || isUpdateMetadata || isFetchingTMDB || tmdbAPI === ''" :loading="isFetchingTMDB" type="primary" icon="el-icon-refresh" v-on:click="fetchTVDB(scope.$index, scope.row.tmdb, true)" size="mini" circle></el-button>
+                        <el-button :disabled="isGetMovieLoading || (scope.row.country.length <= 0) || isUpdateMetadata || isFetchingTMDB" :loading="isUpdateMetadata" type="primary" icon="el-icon-upload2" v-on:click="updateMetadataTV(scope.$index, true)" size="mini" circle></el-button>
                     </template>
                 </el-table-column>
             </el-table>
         </div>
-        <div id="resultPagination" class="tableContainer formRow">
-            <el-pagination :disabled="isGetMovieLoading || isFetchingTMDB || isUpdateMetadata" background layout="prev, pager, next" :page-size="displayedRecord" :current-page.sync="currentPage" :total="totalMovie" @current-change="handlePageChange"></el-pagination>
+        <div id="resultPagination" class="tableContainer formRow" v-if="jfFolder !== ''">
+            <el-pagination :disabled="isGetMovieLoading || isFetchingTMDB || isUpdateMetadata" background layout="prev, pager, next" :page-size="displayedRecord" :current-page.sync="currentPage" :total="totalItem" @current-change="handlePageChange"></el-pagination>
         </div>
         <div id="copyrightNote" class="submitForm copyrightNote">
             copyright &copy; 2020 - adimartha/billyinferno
@@ -94,9 +148,11 @@
 
 <script>
 import { JFApi } from "@/mixins/JFApi";
+import { TVNetworks } from "@/mixins/TVNetworks";
+
 export default {
     name: 'CountryTagUpdater',
-    mixins: [JFApi],
+    mixins: [JFApi, TVNetworks],
     data() {
         return {
             inputTagVisible: false,
@@ -105,17 +161,22 @@ export default {
             isFetchingTMDB: false,
             isUpdateMetadata: false,
             isPageChange: false,
-            getAllMovie: true,
+            getAllItems: true,
             replaceTags: true,
-            totalMovie: 0,
+            totalItem: 0,
             numMovieScanned: 0,
             currentProgress: 0,
             jfProto: 'http://',
             jfURL: '',
             jfUsername: '',
             jfFolder: '',
+            pjfFolder: '',
+            folderList: [],
             jfAPI: '',
             tmdbAPI: '',
+            tvdbAPI: '',
+            tvdbUsername: '',
+            tvdbUserkey: '',
             // this is all jellyfin user data
             jfUserID: '',
             jfServerID: '',
@@ -125,6 +186,8 @@ export default {
             // pagination handling
             currentPage: 1,
             displayedRecord: 100,
+            // type handling
+            folderType: '',
         }
     },
     methods: {
@@ -132,14 +195,14 @@ export default {
         // ----- COMPONENT MANIPLUATION -----
         // ----------------------------------
         formatProgressBar() {
-            if(this.numMovieScanned >= this.totalMovie) {
+            if(this.numMovieScanned >= this.totalItem) {
                 return 'Complete';
             }
             else {
-                return ''+this.numMovieScanned + '/' + this.totalMovie;
+                return ''+this.numMovieScanned + '/' + this.totalItem;
             }
         },
-        generateDisplayList() {
+        async generateDisplayList() {
             // here we will generate the list that will be displayed on the table.
             // we can use "computed", but everytimes I used computed it always showed Vue Warn message
             // even though the "scope-slot" is working correctly (data displayed).
@@ -152,8 +215,8 @@ export default {
             // to be put on the display list.
             var startIndex = ((this.currentPage - 1) * this.displayedRecord);
             var endIndex = (this.currentPage * this.displayedRecord);
-            // check if endIndex > totalMovie, because if it's > then just end at totalMovie
-            if (endIndex > this.totalMovie) { endIndex = this.totalMovie; }
+            // check if endIndex > totalItem, because if it's > then just end at totalItem
+            if (endIndex > this.totalItem) { endIndex = this.totalItem; }
 
             // now make the display list into empty first, before we will fill it later on.
             this.jfDisplayList = [];
@@ -259,6 +322,107 @@ export default {
         // -------------------------
         // ----- MAIN FUNCTION -----
         // -------------------------
+        async getFolderList() {
+            var urlItemList = this.jfProto + this.jfURL + '/Items?UserId=' + this.jfUserID;
+            this.printlog('info', "Get Folder List for user: " + this.jfUsername + " (" + this.jfUserID + ")");
+
+            // perform API call to Jellyfin to get list of items
+            try {
+                const res = await this.jfApiGet(urlItemList, this.jfAPI);
+                // check if status is 200
+                if(res.status === 200) {
+                    // check the total record count to ensure that we have collection
+                    if(res.data.TotalRecordCount > 0) {
+                        // now loop thru all the items
+                        for(var i=0; i<res.data.Items.length; i++) {
+                            // put on the folderList
+                            if(res.data.Items[i].CollectionType == "movies" || res.data.Items[i].CollectionType == "tvshows") {
+                                this.folderList.push({ "name":res.data.Items[i].Name, "type":res.data.Items[i].CollectionType});
+                            }
+                        }
+
+                        // check if folder list empty or not?
+                        if(this.folderList.length <= 0) {
+                            this.printlog('info', "<getFolderList> - No Movies or TV Shows folder");
+                            this.showMsg("No Movies/TV Show found in the item list.");
+                        }
+                    }
+                    else {
+                        this.printlog('warn', "<getFolderList> - No Folder found");
+                        this.showMsg("No folder/collection found on Jellyfin", 'warning');
+                    }
+                }
+                else {
+                    this.printlog('error', "<getFolderList> - Error when connecting to Jellyfin with status: " + res.status);
+                    this.showMsg("ERROR when connecting to Jellyfin with status " + res.status, 'error');
+                }
+            } catch (ex) {
+                this.printlog('error', "<getFolderList> - " + ex);
+                this.showMsg("Error when connecting to Jellyfin.\n" + ex, 'error');
+            }
+        },
+        async getFolder() {
+            // here we will list all the folder we have in Jellyfin.
+            // first initialize the folder list
+            this.folderList = [];
+            this.jfFolder = '';
+            
+            // check if we got all the information needed.
+            if (this.jfURL === '' || this.jfUsername === '' || this.jfAPI === '') {
+                // there are fields that not yet being filled, generate the error message
+                var errorMessage = '';
+                if(this.jfURL === '') {
+                    errorMessage += "Jellyfin URL is empty.\n";
+                }
+                if(this.jfUsername === '') {
+                    errorMessage += "Jellyfin Username is empty.\n";
+                }
+                if(this.jfAPI === '') {
+                    errorMessage += "Jellyfin API Key is empty.\n";
+                }
+                this.showMsg(errorMessage, 'error');
+                return;
+            }
+
+            if(await this.getUserList()) {
+                if(await this.getFolderList()) {
+                    // all done!
+                }
+            }
+        },
+        handleFolderChange(value) {
+            // first check if this jfFolder the same as previous one or not?
+            if(this.pjfFolder !== '') {
+                // previous folder is set already, check if change or not?
+                if(this.pjfFolder !== value) {
+                    // check if we already got data on the movie list or not?
+                    if(this.jfMovieList.length > 0) {
+                        // got data already, means something already displayed on the page
+                        // so ask user whether he really want to change the folder or not?
+                        if(!(confirm("Do you want to change folder from " + this.pjfFolder + " to " + value + "?\nThis will rerset all the result."))) {
+                            // set back the jfFolder to pjfFolder
+                            this.jfFolder = this.pjfFolder;
+                            return;
+                        }
+                    }
+                }
+            }
+
+            // initialize the data
+            this.jfMovieList = [];
+            this.jfDisplayList = [];
+            this.totalItem = 0;
+
+            // check the jfFolder and set the folderType
+            for(var i=0; i<this.folderList.length; i++) {
+                if(this.folderList[i].name ===  value) {
+                    // put this as the folderType
+                    this.folderType = this.folderList[i].type;
+                    this.pjfFolder = value;
+                    return;
+                }
+            }
+        },
         /**
          * getUserList
          * This function will perform API call to Jellyfin to get the userid that will be used
@@ -342,6 +506,14 @@ export default {
                                     // get the id of this collection, since we will use this parent ID to get all the movie list
                                     this.jfParentID = res.data.Items[i].Id;
                                     this.printlog('debug', "Got ParentID : " + this.jfParentID);
+                                    this.folderType = "movies";
+                                    return true;
+                                }
+                                else if(res.data.Items[i].CollectionType == "tvshows") {
+                                    // handle for tv show
+                                    this.jfParentID = res.data.Items[i].Id;
+                                    this.printlog('debug', "Got ParentID : " + this.jfParentID);
+                                    this.folderType = "tvshows";
                                     return true;
                                 }
                                 else {
@@ -376,7 +548,7 @@ export default {
             }
         },
         /**
-         * getMovieDetails
+         * getItemDetails
          * This function will perform API call to get the detail information of the movie, that will be
          * used as base data when we want to check what kind of metadata being stored on the movie it self.
          * 
@@ -390,7 +562,7 @@ export default {
          * - movie detail in JSON format if success
          * - null if failed
          */
-        async getMovieDetails(movieID) {
+        async getItemDetails(movieID) {
             var urlMovieDetail = this.jfProto + this.jfURL + '/Users/' + this.jfUserID + '/Items/' + movieID + '/';
             
             // perform API call to Jellyfin to get list of items
@@ -447,7 +619,7 @@ export default {
                         // initialize the movie list
                         this.jfMovieList = [];
                         // initialize the progress bar computation
-                        this.totalMovie = res.data.TotalRecordCount;
+                        this.totalItem = res.data.TotalRecordCount;
                         this.numMovieScanned = 0;
 
                         // sorted the items data
@@ -466,7 +638,7 @@ export default {
                             isSkipped = false;
 
                             // get movie details
-                            det = await this.getMovieDetails(res.data.Items[i].Id);
+                            det = await this.getItemDetails(res.data.Items[i].Id);
                             
                             // check if tags already exists or not?
                             // this is will helpful later on when we want to populate the production locations.
@@ -483,8 +655,8 @@ export default {
                             }
 
                             // check whether the filter is active or not?
-                            if(!this.getAllMovie) {
-                                // if getAllMovie filter is unchecked, then ensure that we will skip the records
+                            if(!this.getAllItems) {
+                                // if getAllItems filter is unchecked, then ensure that we will skip the records
                                 // that already got the tags.
                                 if(isTagExists) {
                                     isSkipped = true;
@@ -539,6 +711,7 @@ export default {
                                     "id":res.data.Items[i].Id,
                                     "tmdb":providerIdTMDB,
                                     "imdb":providerIdIMDB,
+                                    "studio":[],
                                     "country":rawProductionLocation,
                                     "current_tags":currentTags
                                 });
@@ -547,13 +720,13 @@ export default {
                             // add the number of movie already scanned
                             this.numMovieScanned++;
                             // compute current progress
-                            this.currentProgress = (this.numMovieScanned / this.totalMovie) * 100;
+                            this.currentProgress = (this.numMovieScanned / this.totalItem) * 100;
                         }
                         // all is finished
                         // since we might be filter the movie list, then recalculate the total movie being
                         // displayed, by counting the total record in jfMovieList.
                         // in case no filter it will give the same result.
-                        this.totalMovie = this.jfMovieList.length;
+                        this.totalItem = this.jfMovieList.length;
 
                         // showed the log how log it take
                         this.printlog('info', "Get Movie List from from " + this.jfFolder + " (" + this.jfParentID + ") end at " + Date().toString());
@@ -576,24 +749,209 @@ export default {
                 return false;
             }
         },
+        async getTVList() {
+            var urlMovieList = this.jfProto + this.jfURL + '/Items?UserId=' + this.jfUserID + '&ParentId=' + this.jfParentID;
+            this.printlog('info', "Get TV List from from " + this.jfFolder + " (" + this.jfParentID + ") start at " + Date().toString());
+            
+            // perform API call to Jellyfin to get list of items
+            try {
+                const res = await this.jfApiGet(urlMovieList, this.jfAPI);
+                var det;
+                var isTagExists;
+                var isStudioEmpty;
+                var isUnknownStudio;
+                var isSkipped;
+                var providerIdTVDB;
+                var providerIdIMDB;
+                var rawProductionLocation;
+                var rawStudio = [];
+                var currentStudio;
+                var currentTags;
+                var i,j;
+                // check if status is 200
+                if(res.status === 200) {
+                    // check the total record count to ensure that we have collection
+                    if(res.data.TotalRecordCount > 0) {
+                        // initialize the movie list
+                        this.jfMovieList = [];
+                        // initialize the progress bar computation
+                        this.totalItem = res.data.TotalRecordCount;
+                        this.numMovieScanned = 0;
+
+                        // sorted the items data
+                        res.data.Items.sort(function(a, b) {
+                            var x = a.Name.toLowerCase();
+                            var y = b.Name.toLowerCase();
+                            if (x < y) { return -1; }
+                            if (x > y) { return  1; }
+                        });
+
+                        // now loop thru all the items
+                        for(i=0; i<res.data.Items.length; i++) {
+                        //for(i=0; i<20; i++) {
+                            // initialize the isTagExists, isUnknownStudio, isStudioEmpty and isSkipped flag
+                            isTagExists = false;
+                            isUnknownStudio = false;
+                            isStudioEmpty = false;
+                            isSkipped = false;
+
+                            // get movie details
+                            det = await this.getItemDetails(res.data.Items[i].Id);
+                            
+                            // check if tags already exists or not?
+                            // this is will helpful later on when we want to populate the production locations.
+                            if(det.Tags.length > 0) {
+                                // got tag, now check what tags is already being put on the movie
+                                for(j=0; j<det.Tags.length; j++) {
+                                    // check the tag
+                                    if(det.Tags[j].substr(0,2) === "🌍") {
+                                        // this movie already updated, skip!
+                                        isTagExists = true;
+                                        break;
+                                    }
+                                }
+                            }
+
+                            // check whether the filter is active or not?
+                            if(!this.getAllItems) {
+                                // if getAllItems filter is unchecked, then ensure that we will skip the records
+                                // that already got the tags.
+                                if(isTagExists) {
+                                    isSkipped = true;
+                                }
+                            }
+
+                            // once we reach here, check whether this data need to be skipped or not?
+                            if(!(isSkipped)) {
+                                // data not being skipped
+                                // we will only going to bring below data to be displayed on the table
+                                // once got the data, populate the movielist with relevant data from the details
+                                // such as:
+                                // ProviderID (TMDB, and IMDB)
+                                // ProductionLocations
+                                providerIdTVDB = '';
+                                providerIdIMDB = '';
+                                rawProductionLocation = [];
+                                currentTags = [];
+                                rawStudio = [];
+                                if (!(det===null)) {
+                                    if(!(typeof det.ProviderIds.Imdb === 'undefined')) {
+                                        providerIdIMDB = det.ProviderIds.Imdb;
+                                    }
+                                    if(!(typeof det.ProviderIds.Tvdb === 'undefined')) {
+                                        providerIdTVDB = det.ProviderIds.Tvdb;
+                                    }
+                                    if(!(typeof det.Tags === 'undefined')) {
+                                        currentTags = det.Tags;
+                                    }
+                                    // populate the studio name
+                                    for(j=0; j<det.Studios.length; j++) {
+                                        // get the name and check
+                                        rawStudio.push(det.Studios[j].Name);
+                                        // check if we got any unknown studio
+                                        if(this.getTVNetwork(det.Studios[j].Name) === '') {
+                                            isUnknownStudio = true;
+                                        }
+                                    }
+                                    if(rawStudio.length <= 0) {
+                                        isStudioEmpty = true;
+                                    }
+                                    // use the isTagExists that we checked above, we can determine the correct
+                                    // production location that we need to populate, either it cames from the current
+                                    // tag, or come from production locations fields from Jellyfin response.
+                                    if(isTagExists && currentTags.length > 0) {
+                                        // tags already exists, populate from current tags
+                                        for(j=0; j<currentTags.length; j++) {
+                                            rawProductionLocation.push(currentTags[j].replace('🌍', '').trim());
+                                        }
+                                    }
+                                    else {
+                                        // tags is not yet exists, populate from studios
+                                        if(!(typeof det.Studios === 'undefined')) {
+                                            // check if studios more than 0
+                                            if(det.Studios.length > 0) {
+                                                // loop thru all studio to get the country
+                                                for(j=0; j<det.Studios.length; j++) {
+                                                    // get the name and check
+                                                    currentStudio = this.getTVNetwork(det.Studios[j].Name);
+                                                    if(currentStudio !== '') {
+                                                        // check if current studio already in the rawProcutionLocation list
+                                                        if(!(rawProductionLocation.includes(currentStudio))) {
+                                                            rawProductionLocation.push(currentStudio);
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                this.jfMovieList.push({
+                                    "tag_exist":isTagExists,
+                                    "studio_empty":isStudioEmpty,
+                                    "unknown_studio":isUnknownStudio,
+                                    "name":res.data.Items[i].Name,
+                                    "id":res.data.Items[i].Id,
+                                    "tmdb":providerIdTVDB,
+                                    "imdb":providerIdIMDB,
+                                    "studio":rawStudio,
+                                    "country":rawProductionLocation,
+                                    "current_tags":currentTags
+                                });
+                            }
+
+                            // add the number of movie already scanned
+                            this.numMovieScanned++;
+                            // compute current progress
+                            this.currentProgress = (this.numMovieScanned / this.totalItem) * 100;
+                        }
+                        // all is finished
+                        // since we might be filter the movie list, then recalculate the total movie being
+                        // displayed, by counting the total record in jfMovieList.
+                        // in case no filter it will give the same result.
+                        this.totalItem = this.jfMovieList.length;
+
+                        // showed the log how log it take
+                        this.printlog('info', "Get TV List from from " + this.jfFolder + " (" + this.jfParentID + ") end at " + Date().toString());
+                        return true;
+                    }
+                    else {
+                        this.printlog('warn', "<getTVList> - No collection");
+                        this.showMsg("No collection found on Jellyfin", 'warning');
+                        return false;
+                    }
+                }
+                else {
+                    this.printlog('error', "<getTVList> - Error when connecting to Jellyfin with status: " + res.status);
+                    this.showMsg("Error when connecting to Jellyfin with status " + res.status, 'error');
+                    return false;
+                }
+            } catch (ex) {
+                this.printlog('error', "<getTVList> - " + ex);
+                this.showMsg("Error when connecting to Jellyfin.\n" + ex, 'error');
+                return false;
+            }
+        },
         /**
-         * getMovie
+         * getItem
          * This function is used to perform all the function needed to get the Jellyfin Library specified
          * on the web interface.
          * 
          * Below is the function that being called when Get Movie button is pressed:
          * - getUserList
          *   - getItemList
-         *     - getMovieList
-         *       - getMovieDetails for each movie in getMovieList
+         *     - getItem
+         *       - if movies
+         *         - getItemDetails for each movie in getMovieList
+         *       - if tvshows
+         *         - getItemDetails for each tv in getTVList
          * 
          * All the validation will be handled by each other function.
          * 
          * Return:
          * N/A
          */
-        async getMovie() {
-            this.printlog('info', "Get Movie from Jellyfin");
+        async getItem() {
+            this.printlog('info', "Get Item from Jellyfin");
             // set the loading into true
             this.isGetMovieLoading = true;
 
@@ -620,10 +978,19 @@ export default {
                 if(await this.getUserList()) {
                     // we get the user list
                     if(await this.getItemList()) {
-                        // we get the item list, now we can get the movie list
-                        if(await this.getMovieList()) {
-                            // all done
-                            this.printlog('info', 'Finished getting movie lists.');
+                        // we get the item list, now check whether we need to get movie of tv list
+                        if(this.folderType === 'movies') {
+                            if(await this.getMovieList()) {
+                                // all done
+                                this.printlog('info', 'Finished getting movie lists.');
+                            }
+                        }
+                        else {
+                            // handle for tv shows
+                            if(await this.getTVList()) {
+                                // all done
+                                this.printlog('info', 'Finished getting TV lists.');
+                            }
                         }
                     }
                 }
@@ -631,7 +998,7 @@ export default {
 
             // once done, and we got all the Movie List, now we can generate the display list based 
             // on the movie list being generated.
-            this.generateDisplayList();
+            await this.generateDisplayList();
 
             // set the loading into false, since we already finished
             this.isGetMovieLoading = false;
@@ -649,7 +1016,7 @@ export default {
 
             // since will refresh A LOT of data, ensure to ask first user, that they
             // really want to do this.
-            if(!(confirm("Do you want to refresh all " + this.totalMovie.toString() + " metadata?"))) {
+            if(!(confirm("Do you want to refresh all " + this.totalItem.toString() + " metadata?"))) {
                 // user doesn't want to refresh all, abort!
                 return;
             }
@@ -662,16 +1029,22 @@ export default {
             this.currentProgress = 0;
             for(var i=0; i < this.jfMovieList.length; i++) {
                 // call update meatdata function
-                await this.updateMetadata(i, false);
+                // if this is movie, call the movie function, if this is tv show, call the tv show function
+                if(this.folderType === 'movies') {
+                    await this.updateMetadataMovie(i, false);
+                }
+                else {
+                    await this.updateMetadataTV(i, false);
+                }
                 this.numMovieScanned++;
-                this.currentProgress = (this.numMovieScanned / this.totalMovie) * 100;
+                this.currentProgress = (this.numMovieScanned / this.totalItem) * 100;
             }
 
             // once finished set back the isUpdateMetadata flag to false
             this.isUpdateMetadata = false;
         },
         /**
-         * updateMetadata
+         * updateMetadataMovie
          * This function is to format the body and post the metadata update to Jellyfin API.
          * 
          * For the basic information, we will get the details of the movie as reference value, before we perform
@@ -690,7 +1063,7 @@ export default {
          * Return:
          * N/A
          */
-        async updateMetadata(idx, conf) {
+        async updateMetadataMovie(idx, conf) {
             var index = this.getIndex(idx);
 
             // if confirm is true, it means that it was update individually
@@ -724,7 +1097,7 @@ export default {
                 // once we got the updatedTag that we will get the movie detail again that we will use to populate
                 // the metadata later on
                 try {
-                    const movDetail = await this.getMovieDetails(this.jfMovieList[index].id);
+                    const movDetail = await this.getItemDetails(this.jfMovieList[index].id);
 
                     // check for undefined fields, because each metadata might be have different fields here and there
                     // such as CriticRating, CommunityRating.
@@ -817,6 +1190,148 @@ export default {
             // if confirm is true, set back the isFetchingMetadata into false
             if(conf) { this.isUpdateMetadata = false; }
         },
+        async updateMetadataTV(idx, conf) {
+            var index = this.getIndex(idx);
+
+            // if confirm is true, it means that it was update individually
+            if(conf) {
+                this.printlog('info', "Specific metadata Update for " + this.jfMovieList[index].name + " (" + this.jfMovieList[index].id + ")");
+                this.isUpdateMetadata = true;
+            }
+
+            // update the meta data of the movie with new tag
+            // first ensure that the country is not empty for this one, if empty then just skip
+            var updatedTag = [];
+            var i, j;
+            if(this.jfMovieList[index].country.length > 0) {
+                // generate the updatedTag for this movie
+                for(i=0; i<this.jfMovieList[index].country.length; i++) {
+                    updatedTag.push("🌍 " + this.jfMovieList[index].country[i]);
+                }
+
+                // now check if we need to append the tags or not?
+                if(!(this.replaceTags)) {
+                    // we will not replace the tags, so we will appends the current tags to the updated tags.
+                    // ensure we will not add again the "same" tags
+                    for(i=0; i<this.jfMovieList[index].current_tags.length; i++) {
+                        if(!(updatedTag.indexOf(this.jfMovieList[index].current_tags[i]) !== -1)) {
+                            // tags not exists, push this tag to the updatedTag
+                            updatedTag.push(this.jfMovieList[index].current_tags[i]);
+                        }
+                    }
+                }
+
+                // once we got the updatedTag that we will get the movie detail again that we will use to populate
+                // the metadata later on
+                try {
+                    const tvDetail = await this.getItemDetails(this.jfMovieList[index].id);
+
+                    // check for undefined fields, because each metadata might be have different fields here and there
+                    // such as CriticRating, CommunityRating.
+                    if(typeof tvDetail.OriginalTitle === 'undefined') { tvDetail.OriginalTitle = ""; }
+                    if(typeof tvDetail.ForcedSortName === 'undefined') { tvDetail.ForcedSortName = ""; }
+                    if(typeof tvDetail.CommunityRating === 'undefined') { tvDetail.CommunityRating = ""; }
+                    if(typeof tvDetail.CriticRating === 'undefined') { tvDetail.CriticRating = ""; }
+                    if(typeof tvDetail.Overview === 'undefined') { tvDetail.Overview = ""; }
+                    if(typeof tvDetail.Status === 'undefined') { tvDetail.Status = ""; }
+                    if(typeof tvDetail.AirDays === 'undefined') { tvDetail.AirDays = []; }
+                    if(typeof tvDetail.AirTime === 'undefined') { tvDetail.AirTime = ""; }
+                    if(typeof tvDetail.Genres === 'undefined') { tvDetail.Genres = []; }
+                    if(typeof tvDetail.PremiereDate === 'undefined') { tvDetail.PremiereDate = ""; }
+                    if(typeof tvDetail.EndDate === 'undefined') { tvDetail.EndDate = null; }
+                    if(typeof tvDetail.ProductionYear === 'undefined') { tvDetail.ProductionYear = ""; }
+                    if(typeof tvDetail.OfficialRating === 'undefined') { tvDetail.OfficialRating = ""; }
+                    if(typeof tvDetail.People === 'undefined') { tvDetail.People = []; }
+                    if(typeof tvDetail.LockData === 'undefined') { tvDetail.LockData = false; }
+                    if(typeof tvDetail.LockedFields === 'undefined') { tvDetail.LockedFields = []; }
+                    if(typeof tvDetail.ProviderIds === 'undefined') { tvDetail.ProviderIds = ""; }
+                    if(typeof tvDetail.PreferredMetadataLanguage === 'undefined') { tvDetail.PreferredMetadataLanguage = ""; }
+                    if(typeof tvDetail.PreferredMetadataCountryCode === 'undefined') { tvDetail.PreferredMetadataCountryCode = ""; }
+                    if(typeof tvDetail.RunTimeTicks === 'undefined') { tvDetail.RunTimeTicks = 0; }
+                    if(typeof tvDetail.Taglines === 'undefined') { tvDetail.Taglines = []; }
+
+                    // format the data that we will save since some of the fields being stripped off when posting the
+                    // metadata to jellyfin API
+                    // Studios doesn't have ID
+                    var updatedStudios = [];
+                    for(j=0; j<this.jfMovieList[index].studio.length; j++) {
+                        updatedStudios.push({ "Name": this.jfMovieList[index].studio[j] });
+                    }
+                    
+                    // once we got the move detail, now fill the update data that we will sent to jellyfin
+                    var data = {
+                        "Id": tvDetail.Id,
+                        "Name": tvDetail.Name,
+                        "OriginalTitle": tvDetail.OriginalTitle,
+                        "ForcedSortName": tvDetail.ForcedSortName,
+                        "CommunityRating": tvDetail.CommunityRating,
+                        "CriticRating": tvDetail.CriticRating,
+                        "IndexNumber": null,
+                        "AirsBeforeSeasonNumber": "",
+                        "AirsAfterSeasonNumber": "",
+                        "AirsBeforeEpisodeNumber": "",
+                        "ParentIndexNumber": null,
+                        "DisplayOrder": "",
+                        "Album": "",
+                        "AlbumArtists": [],
+                        "ArtistItems": [],
+                        "Overview": tvDetail.Overview,
+                        "Status": tvDetail.Status,
+                        "AirDays": tvDetail.AirDays,
+                        "AirTime": tvDetail.AirTime,
+                        "Genres": tvDetail.Genres,
+                        "Tags": updatedTag,
+                        "Studios": updatedStudios,
+                        "PremiereDate": tvDetail.PremiereDate,
+                        "DateCreated": tvDetail.DateCreated,
+                        "EndDate": tvDetail.EndDate,
+                        "ProductionYear": tvDetail.ProductionYear,
+                        "AspectRatio": "",
+                        "Video3DFormat": "",
+                        "OfficialRating": tvDetail.OfficialRating,
+                        "CustomRating": "",
+                        "People": tvDetail.People,
+                        "LockData": tvDetail.LockData,
+                        "LockedFields": tvDetail.LockedFields,
+                        "ProviderIds": tvDetail.ProviderIds,
+                        "PreferredMetadataLanguage": tvDetail.PreferredMetadataLanguage,
+                        "PreferredMetadataCountryCode": tvDetail.PreferredMetadataCountryCode,
+                        "RunTimeTicks": tvDetail.RunTimeTicks,
+                        "Taglines": tvDetail.Taglines
+                    };
+
+                    // console.debug(data);
+                    // now post the data to Jellyfin and just hope for the best
+                    var url = this.jfProto + this.jfURL + '/Items/' + tvDetail.Id;
+                    const postMetadata = await this.jfApiPost(url, this.jfAPI, data);
+                    // check for the status
+                    if (postMetadata.status === 204) {
+                        // it's done!
+                    }
+                    else {
+                        // something isn't right
+                        this.printlog('error', "<updateMetadata> Error when updating (" + tvDetail.Name + ") with ID (" + tvDetail.Id + "). HTTP Status: " + postMetadata.status);
+                        if(conf) { this.showMsg("Error when Updating Metadata.\nHTTP Status " + postMetadata.status, 'error'); }
+                    }
+                } catch(ex) {
+                    this.printlog('error', "<updateMetadata> - " + ex);
+                    if(conf) { this.showMsg("Error when Updating Metadata.\n" + ex, 'error'); }
+                }
+
+            }
+
+            // if confirm is true, set back the isFetchingMetadata into false
+            if(conf) { this.isUpdateMetadata = false; }
+        },
+        forceRefresh() {
+            // here we will call either forceRefreshTMDB or the forceRefreshTheTVDB
+            if(this.folderType === 'movies') {
+                this.forceRefreshTMDB();
+            }
+            else {
+                this.forceRefreshTVDB();
+            }
+        },
         /**
          * forceRefreshTMDB
          * This function will perform TMDB API call to all movie metadata that loaded by the tools.
@@ -832,7 +1347,7 @@ export default {
 
             // since will refresh A LOT of data, ensure to ask first user, that they
             // really want to do this.
-            if(!(confirm("Do you want to refresh all " + this.totalMovie.toString() + " from TMDB?"))) {
+            if(!(confirm("Do you want to refresh all " + this.totalItem.toString() + " from TMDB?"))) {
                 // user doesn't want to update, abort!
                 return;
             }
@@ -850,7 +1365,38 @@ export default {
                 // cal the fetchTMDB function
                 await this.fetchTMDB(i, this.jfMovieList[i].tmdb, false);
                 this.numMovieScanned++;
-                this.currentProgress = (this.numMovieScanned / this.totalMovie) * 100;
+                this.currentProgress = (this.numMovieScanned / this.totalItem) * 100;
+                // sleep for 2s, so we will not going to hammer TMDB server
+                await sleep(500);
+            }
+
+            // once done reset back the fetching status into false
+            this.isFetchingTMDB = false;
+        },
+        async forceRefreshTVDB() {
+            const sleep = m => new Promise(r => setTimeout(r, m));
+
+            // since will refresh A LOT of data, ensure to ask first user, that they
+            // really want to do this.
+            if(!(confirm("Do you want to refresh all " + this.totalItem.toString() + " from TVDB?"))) {
+                // user doesn't want to update, abort!
+                return;
+            }
+
+            // show log when we start the task
+            this.printlog('info', "Perform TVDB refresh to all Movie List");
+
+            // set the loading for the fetch into true
+            this.isFetchingTMDB = true;
+
+            // loop thru all movie list, and call fetch tmdb
+            this.numMovieScanned = 0;
+            this.currentProgress = 0;
+            for(var i=0; i < this.jfMovieList.length; i++) {
+                // cal the fetchTMDB function
+                await this.fetchTVDB(i, this.jfMovieList[i].tmdb, false);
+                this.numMovieScanned++;
+                this.currentProgress = (this.numMovieScanned / this.totalItem) * 100;
                 // sleep for 2s, so we will not going to hammer TMDB server
                 await sleep(500);
             }
@@ -945,6 +1491,11 @@ export default {
             // once done check if this is confirm or not? if confirm, then set back the isFetchingTMDB into false
             if(conf) { this.isFetchingTMDB = false; }
         },
+        async fetchTVDB(idx, tvdb, conf) {
+            // fetch TVDB information
+            console.log(idx + ' ' + tvdb + ' ' + conf);
+            // #TODO:
+        },
         /**
          * removeTag
          * This function will remove the tag from the Jellyfin Movie List variable.
@@ -1035,6 +1586,14 @@ export default {
     color: rgb(0, 209, 45);
 }
 
+.unknownIcon {
+    color: rgb(209, 153, 0);
+}
+
+.errorIcon {
+    color:rgb(230, 89, 89);
+}
+
 .copyrightNote {
     text-align: center;
     color: #acacac;
@@ -1045,10 +1604,14 @@ export default {
     width: 110px;
 }
 
+.el-select-dark, .el-select-dark .el-input {
+    width: 294px;
+}
+
 .el-input-group__prepend {
     background-color: rgb(70, 70, 70);
     color: #fff;
-    width: 100px;
+    width: 110px;
     border: 0px;
 }
 
