@@ -83,59 +83,63 @@
         </div>
         <div id="resultTable" class="tableContainer formRow" v-if="jfFolder !== ''">
             <!-- the table result -->
-            <el-table :data="jfDisplayList" v-loading="isGetMovieLoading || isPageChange" height="480px" style="width:100%;" v-if="folderType === 'movies'">
-                <el-table-column fixed label="NAME" width="400">
-                    <template v-slot:default="scope">
-                        {{ scope.row.name }}&nbsp;<i v-if="scope.row.tag_exist" class="el-icon-success successIcon"></i>
-                    </template>
-                </el-table-column>
-                <el-table-column prop="tmdb" label="TMDB" width="85"></el-table-column>
-                <el-table-column prop="imdb" label="IMDB" width="85"></el-table-column>
-                <el-table-column label="COUNTRY" width="320">
-                    <template v-slot:default="scope">
-                        <el-tag v-for="tag in scope.row.country" :key="tag" type="info" disable-transitions closable size="mini" @close="removeTag(scope.$index, tag)">{{tag}}</el-tag>
-                        <el-popover placement="top" title="Add Tags" width="200" trigger="click">
-                            <el-input class="inputNewTag" v-model="inputTagValue" size="mini" @keyup.enter.native="handleInputTagConfirm(scope.$index)" @blur="handleInputTagConfirm(scope.$index)"></el-input>
-                            <el-button slot="reference" type="info" class="tagAddButton">+</el-button>
-                        </el-popover>
-                    </template>
-                </el-table-column>
-                <el-table-column fixed="right" label="ACTION" width="90">
-                    <template v-slot:default="scope">
-                        <el-button :disabled="isGetMovieLoading || (scope.row.tmdb === '') || isUpdateMetadata || isFetchingTMDB || tmdbAPI === ''" :loading="isFetchingTMDB" type="primary" icon="el-icon-refresh" v-on:click="fetchTMDB(scope.$index, scope.row.tmdb, true)" size="mini" circle></el-button>
-                        <el-button :disabled="isGetMovieLoading || (scope.row.country.length <= 0) || isUpdateMetadata || isFetchingTMDB" :loading="isUpdateMetadata" type="primary" icon="el-icon-upload2" v-on:click="updateMetadataMovie(scope.$index, true)" size="mini" circle></el-button>
-                    </template>
-                </el-table-column>
-            </el-table>
-            <el-table :data="jfDisplayList" v-loading="isGetMovieLoading || isPageChange" height="480px" style="width:100%;" v-if="folderType === 'tvshows'">
-                <el-table-column fixed label="NAME" width="300">
-                    <template v-slot:default="scope">
-                        {{ scope.row.name }}&nbsp;<i v-if="scope.row.tag_exist" class="el-icon-success successIcon"></i><i v-if="scope.row.unknown_studio" class="el-icon-question unknownIcon"></i><i v-if="scope.row.studio_empty" class="el-icon-error errorIcon"></i>
-                    </template>
-                </el-table-column>
-                <el-table-column prop="tmdb" label="TVDB" width="85"></el-table-column>
-                <el-table-column prop="imdb" label="IMDB" width="85"></el-table-column>
-                <el-table-column label="STUDIO" width="195">
-                    <template v-slot:default="scope">
-                        <el-tag v-for="tag in scope.row.studio" :key="tag" type="info" disable-transitions size="mini" @close="removeTag(scope.$index, tag)">{{tag}}</el-tag>
-                    </template>
-                </el-table-column>
-                <el-table-column label="COUNTRY" width="225">
-                    <template v-slot:default="scope">
-                        <el-tag v-for="tag in scope.row.country" :key="tag" type="info" disable-transitions closable size="mini" @close="removeTag(scope.$index, tag)">{{tag}}</el-tag>
-                        <el-popover placement="top" title="Add Tags" width="200" trigger="click">
-                            <el-input class="inputNewTag" v-model="inputTagValue" size="mini" @keyup.enter.native="handleInputTagConfirm(scope.$index)" @blur="handleInputTagConfirm(scope.$index)"></el-input>
-                            <el-button slot="reference" type="info" class="tagAddButton">+</el-button>
-                        </el-popover>
-                    </template>
-                </el-table-column>
-                <el-table-column fixed="right" label="ACTION" width="90">
-                    <template v-slot:default="scope">
-                        <el-button :disabled="isGetMovieLoading || (scope.row.tmdb === '') || isUpdateMetadata || isFetchingTMDB || tmdbAPI === ''" :loading="isFetchingTMDB" type="primary" icon="el-icon-refresh" v-on:click="fetchTVDB(scope.$index, scope.row.tmdb, true)" size="mini" circle></el-button>
-                        <el-button :disabled="isGetMovieLoading || (scope.row.country.length <= 0) || isUpdateMetadata || isFetchingTMDB" :loading="isUpdateMetadata" type="primary" icon="el-icon-upload2" v-on:click="updateMetadataTV(scope.$index, true)" size="mini" circle></el-button>
-                    </template>
-                </el-table-column>
-            </el-table>
+            <div id="moviesResultTable" class="tableContainer formRow" v-if="folderType === 'movies'">
+                <el-table :data="jfDisplayList" v-loading="isGetMovieLoading || isPageChange" height="480px" style="width:100%;">
+                    <el-table-column fixed label="NAME" width="400">
+                        <template v-slot:default="scope">
+                            {{ scope.row.name }}&nbsp;<i v-if="scope.row.tag_exist" class="el-icon-success successIcon"></i>
+                        </template>
+                    </el-table-column>
+                    <el-table-column prop="tmdb" label="TMDB" width="85"></el-table-column>
+                    <el-table-column prop="imdb" label="IMDB" width="85"></el-table-column>
+                    <el-table-column label="COUNTRY" width="320">
+                        <template v-slot:default="scope">
+                            <el-tag v-for="tag in scope.row.country" :key="tag" type="info" disable-transitions closable size="mini" @close="removeTag(scope.$index, tag)">{{tag}}</el-tag>
+                            <el-popover placement="top" title="Add Tags" width="200" trigger="click">
+                                <el-input class="inputNewTag" v-model="inputTagValue" size="mini" @keyup.enter.native="handleInputTagConfirm(scope.$index)" @blur="handleInputTagConfirm(scope.$index)"></el-input>
+                                <el-button slot="reference" type="info" class="tagAddButton">+</el-button>
+                            </el-popover>
+                        </template>
+                    </el-table-column>
+                    <el-table-column fixed="right" label="ACTION" width="90">
+                        <template v-slot:default="scope">
+                            <el-button :disabled="isGetMovieLoading || (scope.row.tmdb === '') || isUpdateMetadata || isFetchingTMDB || tmdbAPI === ''" :loading="isFetchingTMDB" type="primary" icon="el-icon-refresh" v-on:click="fetchTMDB(scope.$index, scope.row.tmdb, true)" size="mini" circle></el-button>
+                            <el-button :disabled="isGetMovieLoading || (scope.row.country.length <= 0) || isUpdateMetadata || isFetchingTMDB" :loading="isUpdateMetadata" type="primary" icon="el-icon-upload2" v-on:click="updateMetadataMovie(scope.$index, true)" size="mini" circle></el-button>
+                        </template>
+                    </el-table-column>
+                </el-table>
+            </div>
+            <div id="tvResultTable" class="tableContainer formRow" v-if="folderType === 'tvshows'">
+                <el-table :data="jfDisplayList" v-loading="isGetMovieLoading || isPageChange" height="480px" style="width:100%;">
+                    <el-table-column fixed label="NAME" width="300">
+                        <template v-slot:default="scope">
+                            {{ scope.row.name }}&nbsp;<i v-if="scope.row.tag_exist" class="el-icon-success successIcon"></i><i v-if="scope.row.unknown_studio" class="el-icon-question unknownIcon"></i><i v-if="scope.row.studio_empty" class="el-icon-error errorIcon"></i>
+                        </template>
+                    </el-table-column>
+                    <el-table-column prop="tmdb" label="TVDB" width="85"></el-table-column>
+                    <el-table-column prop="imdb" label="IMDB" width="85"></el-table-column>
+                    <el-table-column label="STUDIO" width="195">
+                        <template v-slot:default="scope">
+                            <el-tag v-for="tag in scope.row.studio" :key="tag" type="info" disable-transitions size="mini" @close="removeTag(scope.$index, tag)">{{tag}}</el-tag>
+                        </template>
+                    </el-table-column>
+                    <el-table-column label="COUNTRY" width="225">
+                        <template v-slot:default="scope">
+                            <el-tag v-for="tag in scope.row.country" :key="tag" type="info" disable-transitions closable size="mini" @close="removeTag(scope.$index, tag)">{{tag}}</el-tag>
+                            <el-popover placement="top" title="Add Tags" width="200" trigger="click">
+                                <el-input class="inputNewTag" v-model="inputTagValue" size="mini" @keyup.enter.native="handleInputTagConfirm(scope.$index)" @blur="handleInputTagConfirm(scope.$index)"></el-input>
+                                <el-button slot="reference" type="info" class="tagAddButton">+</el-button>
+                            </el-popover>
+                        </template>
+                    </el-table-column>
+                    <el-table-column fixed="right" label="ACTION" width="90">
+                        <template v-slot:default="scope">
+                            <el-button :disabled="isGetMovieLoading || (scope.row.tmdb === '') || isUpdateMetadata || isFetchingTMDB || tmdbAPI === ''" :loading="isFetchingTMDB" type="primary" icon="el-icon-refresh" v-on:click="fetchTVDB(scope.$index, scope.row.tmdb, true)" size="mini" circle></el-button>
+                            <el-button :disabled="isGetMovieLoading || (scope.row.country.length <= 0) || isUpdateMetadata || isFetchingTMDB" :loading="isUpdateMetadata" type="primary" icon="el-icon-upload2" v-on:click="updateMetadataTV(scope.$index, true)" size="mini" circle></el-button>
+                        </template>
+                    </el-table-column>
+                </el-table>
+            </div>
         </div>
         <div id="resultPagination" class="tableContainer formRow" v-if="jfFolder !== ''">
             <el-pagination :disabled="isGetMovieLoading || isFetchingTMDB || isUpdateMetadata" background layout="prev, pager, next" :page-size="displayedRecord" :current-page.sync="currentPage" :total="totalItem" @current-change="handlePageChange"></el-pagination>
