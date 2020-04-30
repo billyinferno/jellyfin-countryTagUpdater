@@ -22,10 +22,18 @@
             </el-row>
             <el-row class="formRow el-row el-input el-input-group el-input-group--prepend">
                 <div class="el-input-group__prepend">Folder</div>
-                <el-select :disabled="isGetMovieLoading || isFetchingTMDB || isUpdateMetadata" v-model="jfFolder" placeholder="Select" class="el-select-dark" @change="handleFolderChange">
+                <el-select :disabled="isGetMovieLoading || isFetchingTMDB || isUpdateMetadata" v-model="jfFolder" filterable placeholder="Select" class="el-select-dark" @change="handleFolderChange">
                     <el-option v-for="folderItem in folderList" :key="folderItem.name" :label="folderItem.name" :value="folderItem.name"></el-option>
                 </el-select>
                 <el-button :disabled="isGetMovieLoading || isFetchingTMDB || isUpdateMetadata" type="primary" icon="el-icon-refresh" v-on:click="getFolder"></el-button>
+            </el-row>
+            <el-row class="formRow" v-if="jfFolder !== ''">
+                <el-input :disabled="isGetMovieLoading || isFetchingTMDB || isUpdateMetadata || jfTagType === 'countries'" placeholder="Tag Value" v-model="jfTagValue" class="input-with-select">
+                    <el-select :disabled="isGetMovieLoading || isFetchingTMDB || isUpdateMetadata" v-model="jfTagType" slot="prepend" placeholder="protocol">
+                        <el-option label="countries" value="countries"></el-option>
+                        <el-option label="static" value="static"></el-option>
+                    </el-select>
+                </el-input>
             </el-row>
             <el-row class="formRow" v-if="folderType === 'movies'">
                 <el-input :disabled="isFetchingTMDB" placeholder="TMDB API" v-model="tmdbAPI">
@@ -70,8 +78,8 @@
                     <el-button :disabled="isGetMovieLoading || isFetchingTMDB || isUpdateMetadata" :loading="isGetMovieLoading" type="primary" round style="width:100%;" v-on:click="getItem">Get Item</el-button>
                 </el-col>
                 <el-col :span="8">
-                    <el-button v-if="folderType==='movies'" :disabled="(jfMovieList.length <= 0) || isGetMovieLoading || isFetchingTMDB || isUpdateMetadata || tmdbAPI === ''" :loading="isFetchingTMDB" type="primary" round style="width:100%;" v-on:click="forceRefresh">Force TMDB</el-button>
-                    <el-button v-if="folderType==='tvshows'" :disabled="(jfMovieList.length <= 0) || isGetMovieLoading || isFetchingTMDB || isUpdateMetadata || tvdbAPI === '' || tvdbUsername === '' || tvdbUserkey === ''" :loading="isFetchingTMDB" type="primary" round style="width:100%;" v-on:click="forceRefresh">Force TVDB</el-button>
+                    <el-button v-if="folderType==='movies'" :disabled="(jfMovieList.length <= 0) || isGetMovieLoading || isFetchingTMDB || isUpdateMetadata || tmdbAPI === '' || jfTagType === 'countries'" :loading="isFetchingTMDB" type="primary" round style="width:100%;" v-on:click="forceRefresh">Force TMDB</el-button>
+                    <el-button v-if="folderType==='tvshows'" :disabled="(jfMovieList.length <= 0) || isGetMovieLoading || isFetchingTMDB || isUpdateMetadata || tvdbAPI === '' || tvdbUsername === '' || tvdbUserkey === '' || jfTagType === 'countries'" :loading="isFetchingTMDB" type="primary" round style="width:100%;" v-on:click="forceRefresh">Force TVDB</el-button>
                 </el-col>
                 <el-col :span="8">
                     <el-button :disabled="(jfMovieList.length <= 0) || isGetMovieLoading || isFetchingTMDB || isUpdateMetadata" :loading="isUpdateMetadata" type="primary" round style="width:100%;" v-on:click="forceUpdateMetadata">Update Tag</el-button>
@@ -92,18 +100,22 @@
                     </el-table-column>
                     <el-table-column prop="tmdb" label="TMDB" width="85"></el-table-column>
                     <el-table-column prop="imdb" label="IMDB" width="85"></el-table-column>
-                    <el-table-column label="COUNTRY" width="320">
+                    <el-table-column label="TAGS" width="320">
                         <template v-slot:default="scope">
-                            <el-tag v-for="tag in scope.row.country" :key="tag" type="info" disable-transitions closable size="mini" @close="removeTag(scope.$index, tag)">{{tag}}</el-tag>
+                            <el-tag v-for="tag in scope.row.country" :key="tag" type="success" disable-transitions closable size="mini" @close="removeTag(scope.$index, tag)">{{tag}}</el-tag>
                             <el-popover placement="top" title="Add Tags" width="200" trigger="click">
                                 <el-input class="inputNewTag" v-model="inputTagValue" size="mini" @keyup.enter.native="handleInputTagConfirm(scope.$index)" @blur="handleInputTagConfirm(scope.$index)"></el-input>
+                                <el-checkbox v-model="inputTagType">🌍</el-checkbox>
                                 <el-button slot="reference" type="info" class="tagAddButton">+</el-button>
                             </el-popover>
+                            <div id="uniqueTags" v-if="replaceTags === false">
+                                <el-tag v-for="tag in scope.row.unique_tags" :key="tag" type="info" disable-transitions size="mini">{{tag}}</el-tag>
+                            </div>
                         </template>
                     </el-table-column>
                     <el-table-column fixed="right" label="ACTION" width="90">
                         <template v-slot:default="scope">
-                            <el-button :disabled="isGetMovieLoading || (scope.row.tmdb === '') || isUpdateMetadata || isFetchingTMDB || tmdbAPI === ''" :loading="isFetchingTMDB" type="primary" icon="el-icon-refresh" v-on:click="fetchTMDB(scope.$index, scope.row.tmdb, true)" size="mini" circle></el-button>
+                            <el-button :disabled="isGetMovieLoading || (scope.row.tmdb === '') || isUpdateMetadata || isFetchingTMDB || tmdbAPI === '' || jfTagType === 'countries'" :loading="isFetchingTMDB" type="primary" icon="el-icon-refresh" v-on:click="fetchTMDB(scope.$index, scope.row.tmdb, true)" size="mini" circle></el-button>
                             <el-button :disabled="isGetMovieLoading || (scope.row.country.length <= 0) || isUpdateMetadata || isFetchingTMDB" :loading="isUpdateMetadata" type="primary" icon="el-icon-upload2" v-on:click="updateMetadataMovie(scope.$index, true)" size="mini" circle></el-button>
                         </template>
                     </el-table-column>
@@ -123,18 +135,21 @@
                             <el-tag v-for="tag in scope.row.studio" :key="tag" type="info" disable-transitions size="mini" @close="removeTag(scope.$index, tag)">{{tag}}</el-tag>
                         </template>
                     </el-table-column>
-                    <el-table-column label="COUNTRY" width="225">
+                    <el-table-column label="TAGS" width="225">
                         <template v-slot:default="scope">
                             <el-tag v-for="tag in scope.row.country" :key="tag" type="info" disable-transitions closable size="mini" @close="removeTag(scope.$index, tag)">{{tag}}</el-tag>
                             <el-popover placement="top" title="Add Tags" width="200" trigger="click">
                                 <el-input class="inputNewTag" v-model="inputTagValue" size="mini" @keyup.enter.native="handleInputTagConfirm(scope.$index)" @blur="handleInputTagConfirm(scope.$index)"></el-input>
                                 <el-button slot="reference" type="info" class="tagAddButton">+</el-button>
                             </el-popover>
+                            <div id="uniqueTags" v-if="replaceTags === false">
+                                <el-tag v-for="tag in scope.row.unique_tags" :key="tag" type="info" disable-transitions size="mini">{{tag}}</el-tag>
+                            </div>
                         </template>
                     </el-table-column>
                     <el-table-column fixed="right" label="ACTION" width="90">
                         <template v-slot:default="scope">
-                            <el-button :disabled="isGetMovieLoading || (scope.row.tmdb === '') || isUpdateMetadata || isFetchingTMDB || tmdbAPI === ''" :loading="isFetchingTMDB" type="primary" icon="el-icon-refresh" v-on:click="fetchTVDB(scope.$index, scope.row.tmdb, true)" size="mini" circle></el-button>
+                            <el-button :disabled="isGetMovieLoading || (scope.row.tmdb === '') || isUpdateMetadata || isFetchingTMDB || tvdbAPI === '' || tvdbUsername === '' || tvdbUserkey === '' || jfTagType === 'countries'" :loading="isFetchingTMDB" type="primary" icon="el-icon-refresh" v-on:click="fetchTVDB(scope.$index, scope.row.tmdb, true)" size="mini" circle></el-button>
                             <el-button :disabled="isGetMovieLoading || (scope.row.country.length <= 0) || isUpdateMetadata || isFetchingTMDB" :loading="isUpdateMetadata" type="primary" icon="el-icon-upload2" v-on:click="updateMetadataTV(scope.$index, true)" size="mini" circle></el-button>
                         </template>
                     </el-table-column>
@@ -161,15 +176,18 @@ export default {
         return {
             inputTagVisible: false,
             inputTagValue: '',
+            inputTagType: true,
             isGetMovieLoading: false,
             isFetchingTMDB: false,
             isUpdateMetadata: false,
             isPageChange: false,
             getAllItems: true,
-            replaceTags: true,
+            replaceTags: false,
             totalItem: 0,
             numMovieScanned: 0,
             currentProgress: 0,
+            jfTagValue: '',
+            jfTagType: 'countries',
             jfProto: 'http://',
             jfURL: '',
             jfUsername: '',
@@ -615,6 +633,7 @@ export default {
                 var providerIdIMDB;
                 var rawProductionLocation;
                 var currentTags;
+                var uniqueTags;
                 var i,j;
                 // check if status is 200
                 if(res.status === 200) {
@@ -649,11 +668,22 @@ export default {
                             if(det.Tags.length > 0) {
                                 // got tag, now check what tags is already being put on the movie
                                 for(j=0; j<det.Tags.length; j++) {
-                                    // check the tag
-                                    if(det.Tags[j].substr(0,2) === "🌍") {
-                                        // this movie already updated, skip!
-                                        isTagExists = true;
-                                        break;
+                                    // check the tag type
+                                    if(this.jfTagType === 'countries') {
+                                        // check whether got country tag?
+                                        if(det.Tags[j].substr(0,2) === "🌍") {
+                                            // this movie already updated, skip!
+                                            isTagExists = true;
+                                            break;
+                                        }
+                                    }
+                                    else {
+                                        // check if the existing tag is exists or not?
+                                        if(det.Tags[j] === this.jfTagValue) {
+                                            // this movie alreadyt got the tag
+                                            isTagExists = true;
+                                            break;
+                                        }
                                     }
                                 }
                             }
@@ -679,6 +709,7 @@ export default {
                                 providerIdIMDB = '';
                                 rawProductionLocation = [];
                                 currentTags = [];
+                                uniqueTags = [];
                                 if (!(det===null)) {
                                     if(!(typeof det.ProviderIds.Imdb === 'undefined')) {
                                         providerIdIMDB = det.ProviderIds.Imdb;
@@ -695,20 +726,47 @@ export default {
                                     if(isTagExists && currentTags.length > 0) {
                                         // tags already exists, populate from current tags
                                         for(j=0; j<currentTags.length; j++) {
-                                            rawProductionLocation.push(currentTags[j].replace('🌍', '').trim());
-                                        }
-                                    }
-                                    else {
-                                        // tags is not yet exists, populate from production location
-                                        if(!(typeof det.ProductionLocations === 'undefined')) {
-                                            // check if production locations more than 0
-                                            if(det.ProductionLocations.length > 0) {
-                                                // join all array with ","
-                                                rawProductionLocation = det.ProductionLocations;
+                                            if(this.jfTagType == 'countries') {
+                                                if(currentTags[j].substr(0,2) === "🌍") {
+                                                    rawProductionLocation.push(currentTags[j].trim());
+                                                }
+                                            }
+                                            else {
+                                                if(currentTags[j].trim() === this.jfTagValue) {
+                                                    rawProductionLocation.push(currentTags[j].trim());
+                                                }
                                             }
                                         }
                                     }
+                                    else {
+                                        // tags is not yet exists, check if we need to populate from production location
+                                        // or user want to put static tags?
+                                        if(this.jfTagType === 'countries') {
+                                            // tags is not yet exists, populate from production location
+                                            if(!(typeof det.ProductionLocations === 'undefined')) {
+                                                // check if production locations more than 0
+                                                if(det.ProductionLocations.length > 0) {
+                                                    // loop thru all the production locations, and add 🌍
+                                                    for(j=0; j<det.ProductionLocations.length; j++) {
+                                                        rawProductionLocation.push('🌍 ' + det.ProductionLocations[j].trim())
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        else {
+                                            // get the tag from the static tag value
+                                            rawProductionLocation.push(this.jfTagValue);
+                                        }
+                                    }
                                 }
+                                // get the unique value from both of them and put on the unique tags
+                                for(j=0; j<currentTags.length; j++) {
+                                    if(!(rawProductionLocation.indexOf(currentTags[j]) !== -1)) {
+                                        // tags not exists, push this tag to the updatedTag
+                                        uniqueTags.push(currentTags[j]);
+                                    }
+                                }
+
                                 this.jfMovieList.push({
                                     "tag_exist":isTagExists,
                                     "name":res.data.Items[i].Name,
@@ -717,7 +775,8 @@ export default {
                                     "imdb":providerIdIMDB,
                                     "studio":[],
                                     "country":rawProductionLocation,
-                                    "current_tags":currentTags
+                                    "current_tags":currentTags,
+                                    "unique_tags":uniqueTags,
                                 });
                             }
 
@@ -771,6 +830,7 @@ export default {
                 var rawStudio = [];
                 var currentStudio;
                 var currentTags;
+                var uniqueTags;
                 var i,j;
                 // check if status is 200
                 if(res.status === 200) {
@@ -807,11 +867,22 @@ export default {
                             if(det.Tags.length > 0) {
                                 // got tag, now check what tags is already being put on the movie
                                 for(j=0; j<det.Tags.length; j++) {
-                                    // check the tag
-                                    if(det.Tags[j].substr(0,2) === "🌍") {
-                                        // this movie already updated, skip!
-                                        isTagExists = true;
-                                        break;
+                                    // check the tag type
+                                    if(this.jfTagType === 'countries') {
+                                        // check the country tags
+                                        if(det.Tags[j].substr(0,2) === "🌍") {
+                                            // this tv already updated
+                                            isTagExists = true;
+                                            break;
+                                        }
+                                    }
+                                    else {
+                                        // check if the static tags is already put
+                                        if(det.Tags[j].trim() === this.jfTagValue) {
+                                            // this tv already got the tag
+                                            isTagExists = true;
+                                            break;
+                                        }
                                     }
                                 }
                             }
@@ -837,6 +908,7 @@ export default {
                                 providerIdIMDB = '';
                                 rawProductionLocation = [];
                                 currentTags = [];
+                                uniqueTags = [];
                                 rawStudio = [];
                                 if (!(det===null)) {
                                     if(!(typeof det.ProviderIds.Imdb === 'undefined')) {
@@ -866,27 +938,49 @@ export default {
                                     if(isTagExists && currentTags.length > 0) {
                                         // tags already exists, populate from current tags
                                         for(j=0; j<currentTags.length; j++) {
-                                            rawProductionLocation.push(currentTags[j].replace('🌍', '').trim());
+                                            if(this.jfTagType == 'countries') {
+                                                if(currentTags[j].substr(0,2) === "🌍") {
+                                                    rawProductionLocation.push(currentTags[j].trim());
+                                                }
+                                            }
+                                            else {
+                                                if(currentTags[j].trim() === this.jfTagValue) {
+                                                    rawProductionLocation.push(currentTags[j].trim());
+                                                }
+                                            }
                                         }
                                     }
                                     else {
-                                        // tags is not yet exists, populate from studios
-                                        if(!(typeof det.Studios === 'undefined')) {
-                                            // check if studios more than 0
-                                            if(det.Studios.length > 0) {
-                                                // loop thru all studio to get the country
-                                                for(j=0; j<det.Studios.length; j++) {
-                                                    // get the name and check
-                                                    currentStudio = this.getTVNetwork(det.Studios[j].Name);
-                                                    if(currentStudio !== '') {
-                                                        // check if current studio already in the rawProcutionLocation list
-                                                        if(!(rawProductionLocation.includes(currentStudio))) {
-                                                            rawProductionLocation.push(currentStudio);
+                                        // check tag type
+                                        if(this.jfTagType === 'countries') {
+                                            // tags is not yet exists, populate from studios
+                                            if(!(typeof det.Studios === 'undefined')) {
+                                                // check if studios more than 0
+                                                if(det.Studios.length > 0) {
+                                                    // loop thru all studio to get the country
+                                                    for(j=0; j<det.Studios.length; j++) {
+                                                        // get the name and check
+                                                        currentStudio = this.getTVNetwork(det.Studios[j].Name);
+                                                        if(currentStudio !== '') {
+                                                            // check if current studio already in the rawProcutionLocation list
+                                                            if(!(rawProductionLocation.includes(currentStudio))) {
+                                                                rawProductionLocation.push('🌍 ' + currentStudio);
+                                                            }
                                                         }
                                                     }
                                                 }
                                             }
                                         }
+                                        else {
+                                            rawProductionLocation.push(this.jfTagValue);
+                                        }
+                                    }
+                                }
+                                // get the unique value from both of them and put on the unique tags
+                                for(j=0; j<currentTags.length; j++) {
+                                    if(!(rawProductionLocation.indexOf(currentTags[j]) !== -1)) {
+                                        // tags not exists, push this tag to the updatedTag
+                                        uniqueTags.push(currentTags[j]);
                                     }
                                 }
                                 this.jfMovieList.push({
@@ -899,7 +993,8 @@ export default {
                                     "imdb":providerIdIMDB,
                                     "studio":rawStudio,
                                     "country":rawProductionLocation,
-                                    "current_tags":currentTags
+                                    "current_tags":currentTags,
+                                    "unique_tags":uniqueTags
                                 });
                             }
 
@@ -1083,7 +1178,8 @@ export default {
             if(this.jfMovieList[index].country.length > 0) {
                 // generate the updatedTag for this movie
                 for(i=0; i<this.jfMovieList[index].country.length; i++) {
-                    updatedTag.push("🌍 " + this.jfMovieList[index].country[i]);
+                    // no need to put 🌍, since we already add this on the raw data on the JF movie list
+                    updatedTag.push(this.jfMovieList[index].country[i]);
                 }
 
                 // now check if we need to append the tags or not?
@@ -1210,7 +1306,8 @@ export default {
             if(this.jfMovieList[index].country.length > 0) {
                 // generate the updatedTag for this movie
                 for(i=0; i<this.jfMovieList[index].country.length; i++) {
-                    updatedTag.push("🌍 " + this.jfMovieList[index].country[i]);
+                    // no need to add 🌍, since we already add this on raw data on JF movie list
+                    updatedTag.push(this.jfMovieList[index].country[i]);
                 }
 
                 // now check if we need to append the tags or not?
@@ -1537,17 +1634,23 @@ export default {
                 // check if the tag is already available on the array or not?
                 // since we need to perform not-case-sensitive on the Tag, hence need to perform loop on the tags
                 // and see if the tag being inputted is the same or not?
-                var currentTag = this.inputTagValue.toLowerCase();
+                var currentTag = '';
+                if(this.inputTagType === true) {
+                    currentTag = '🌍 ';
+                }
+                currentTag = currentTag + this.inputTagValue;
+                
                 for(var i=0; i<this.jfMovieList[index].country.length; i++) {
-                    if(this.jfMovieList[index].country[i].toLowerCase() === currentTag) {
+                    if(this.jfMovieList[index].country[i].toLowerCase() === currentTag.toLowerCase()) {
                         this.printlog('info', "Tag (" + this.inputTagValue + " already exists in Movie (" + this.jfMovieList[index].name + ")");
                         return;
                     }
                 }
 
                 // if we passed the check above, it means that it's safe to add the tag on the list
-                this.jfMovieList[index].country.push(this.inputTagValue);
+                this.jfMovieList[index].country.push(currentTag);
                 this.inputTagValue = '';
+                this.inputTagType = true;
             }
         },
     }
