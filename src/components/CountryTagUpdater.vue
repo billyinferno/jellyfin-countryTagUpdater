@@ -137,9 +137,10 @@
                     </el-table-column>
                     <el-table-column label="TAGS" width="225">
                         <template v-slot:default="scope">
-                            <el-tag v-for="tag in scope.row.country" :key="tag" type="info" disable-transitions closable size="mini" @close="removeTag(scope.$index, tag)">{{tag}}</el-tag>
+                            <el-tag v-for="tag in scope.row.country" :key="tag" type="success" disable-transitions closable size="mini" @close="removeTag(scope.$index, tag)">{{tag}}</el-tag>
                             <el-popover placement="top" title="Add Tags" width="200" trigger="click">
                                 <el-input class="inputNewTag" v-model="inputTagValue" size="mini" @keyup.enter.native="handleInputTagConfirm(scope.$index)" @blur="handleInputTagConfirm(scope.$index)"></el-input>
+                                <el-checkbox v-model="inputTagType">🌍</el-checkbox>
                                 <el-button slot="reference" type="info" class="tagAddButton">+</el-button>
                             </el-popover>
                             <div id="uniqueTags" v-if="replaceTags === false">
