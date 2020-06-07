@@ -565,7 +565,7 @@ export default {
                     return false;
                 }
             } catch (ex) {
-                this.printlog('error', "<getUserList> - " + ex);
+                this.printlog('error', "<getItemList> - " + ex);
                 this.showMsg("Error when connecting to Jellyfin.\n" + ex, 'error');
                 return false;
             }
@@ -597,20 +597,80 @@ export default {
                     return res.data;
                 }
                 else {
-                    this.printlog('error', "<getItemList> - Error when connecting to Jellyfin with status: " + res.status);
+                    this.printlog('error', "<getItemDetails> - Error when connecting to Jellyfin with status: " + res.status);
                     this.showMsg("Error when connecting to Jellyfin with status " + res.status, 'error');
                     return null;
                 }
             } catch (ex) {
-                this.printlog('error', "<getUserList> - " + ex);
+                this.printlog('error', "<getItemDetails> - " + ex);
                 this.showMsg("Error when connecting to Jellyfin.\n" + ex, 'error');
                 return null;
             }
         },
         /**
+         * getMovieSubList
+         * This will perform API call to Jellyfin to get movie list, in case that it found that it's a Folder, it will try
+         * to traverse inside the folder, and combine all the data so it will become a bing-long-single list of movie.
+         * This is need to be done, since some user stored their movie inside a folder, instead directly under Libraries folder.
+         * 
+         * Argument:
+         * - subFolderId: the ID of the folder we want to traverse
+         * 
+         * Return:
+         * - null if nothing inside the folder
+         * - array of Name and Id of the movie detail
+         */
+        async getMovieSubList(subFolderId) {
+            var urlMovieList = this.jfProto + this.jfURL + '/Items?UserId=' + this.jfUserID + '&ParentId=' + subFolderId + '&EnableTotalRecordCount=true&EnableImages=false&EnableUserData=false&SortBy=SortName';
+            var result = [];
+            var subResult = [];
+
+            // perform API call to Jellyfin to get the items in listfolder
+            try {
+                const res = await this.jfApiGet(urlMovieList, this.jfAPI);
+                this.printlog('info', "Get Movie List from from " + this.jfFolder + " (" + subFolderId + ") start at " + Date().toString());
+
+                // check if we got 200?
+                if(res.status === 200) {
+                    if(res.data.TotalRecordCount > 0) {
+                        // loop thru all the record data and add it to the result
+                        for(var i=0; i<res.data.TotalRecordCount; i++) {
+                            // check if this is folder also or not?
+                            if(res.data.Items[i].IsFolder) {
+                                // this is a folder, get the subFolder again
+                                subResult = await this.getMovieSubList(res.data.Items[i].id);
+                                if(subResult.length > 0) {
+                                    // add the subResult to the result
+                                    for(var j=0; j<subResult.length; j++) {
+                                        result.push({
+                                            "Name":subResult[j].Name,
+                                            "Id":subResult[j].Id
+                                        });
+                                    }
+                                }
+                            }
+                            else if(res.data.Items[i].Type == "Movie") {
+                                result.push({
+                                    "Name":res.data.Items[i].Name,
+                                    "Id":res.data.Items[i].Id
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+            catch(ex) {
+                this.printlog('error', "<getMovieSubList> - " + ex);
+                this.showMsg("Error when connecting to Jellyfin.\n" + ex, 'error');
+            }
+
+            // return whatever the result, if empty then we will going to ignore the result
+            // on the call procedure
+            return result;
+        },
+        /**
          * getMovieList
-         * This function will get list of the movies on the folder based on the user id and parent id that
-         * already got before.
+         * This function will get list of the movies from Jellyfin Server.
          * 
          * The movie will be put on the array and sorted based on the movie name before further processing.
          * 
@@ -621,12 +681,11 @@ export default {
          * N/A
          */
         async getMovieList() {
-            var urlMovieList = this.jfProto + this.jfURL + '/Items?UserId=' + this.jfUserID + '&ParentId=' + this.jfParentID;
-            this.printlog('info', "Get Movie List from from " + this.jfFolder + " (" + this.jfParentID + ") start at " + Date().toString());
-            
             // perform API call to Jellyfin to get list of items
             try {
-                const res = await this.jfApiGet(urlMovieList, this.jfAPI);
+                // instead of using jfApiGet call, we can use the getMovieSubList
+                const res = await this.getMovieSubList(this.jfParentID);
+
                 var det;
                 var isTagExists;
                 var isSkipped;
@@ -636,183 +695,189 @@ export default {
                 var currentTags;
                 var uniqueTags;
                 var i,j;
-                // check if status is 200
-                if(res.status === 200) {
-                    // check the total record count to ensure that we have collection
-                    if(res.data.TotalRecordCount > 0) {
-                        // initialize the movie list
-                        this.jfMovieList = [];
-                        // initialize the progress bar computation
-                        this.totalItem = res.data.TotalRecordCount;
-                        this.numMovieScanned = 0;
 
-                        // sorted the items data
-                        res.data.Items.sort(function(a, b) {
-                            var x = a.Name.toLowerCase();
-                            var y = b.Name.toLowerCase();
-                            if (x < y) { return -1; }
-                            if (x > y) { return  1; }
-                        });
+                // check the total record count to ensure that we have collection
+                if(res.length > 0) {
+                    // initialize the movie list
+                    this.jfMovieList = [];
 
-                        // now loop thru all the items
-                        for(i=0; i<res.data.Items.length; i++) {
-                        //for(i=0; i<20; i++) {
-                            // initialize the isTagExists, and isSkipped flag
-                            isTagExists = false;
-                            isSkipped = false;
+                    // initialize the progress bar computation
+                    this.totalItem = res.length;
+                    this.numMovieScanned = 0;
 
-                            // get movie details
-                            det = await this.getItemDetails(res.data.Items[i].Id);
-                            
-                            // check if tags already exists or not?
-                            // this is will helpful later on when we want to populate the production locations.
-                            if(det.Tags.length > 0) {
-                                // got tag, now check what tags is already being put on the movie
-                                for(j=0; j<det.Tags.length; j++) {
-                                    // check the tag type
-                                    if(this.jfTagType === 'countries') {
-                                        // check whether got country tag?
-                                        if(det.Tags[j].substr(0,2) === "🌍") {
-                                            // this movie already updated, skip!
-                                            isTagExists = true;
-                                            break;
-                                        }
+                    // sorted the items data
+                    res.sort(function(a, b) {
+                        var x = a.Name.toLowerCase();
+                        var y = b.Name.toLowerCase();
+                        if (x < y) { return -1; }
+                        if (x > y) { return  1; }
+                    });
+
+                    // now loop thru all the items
+                    for(i=0; i<res.length; i++) {
+                    //for(i=0; i<20; i++) {
+                        // initialize the isTagExists, and isSkipped flag
+                        isTagExists = false;
+                        isSkipped = false;
+
+                        // get movie details
+                        det = await this.getItemDetails(res[i].Id);
+                        
+                        // check if tags already exists or not?
+                        // this is will helpful later on when we want to populate the production locations.
+                        if(det.Tags.length > 0) {
+                            // got tag, now check what tags is already being put on the movie
+                            for(j=0; j<det.Tags.length; j++) {
+                                // check the tag type
+                                if(this.jfTagType === 'countries') {
+                                    // check whether got country tag?
+                                    if(det.Tags[j].substr(0,2) === "🌍") {
+                                        // this movie already updated, skip!
+                                        isTagExists = true;
+                                        break;
                                     }
-                                    else {
-                                        // check if the existing tag is exists or not?
-                                        if(det.Tags[j] === this.jfTagValue) {
-                                            // this movie alreadyt got the tag
-                                            isTagExists = true;
-                                            break;
-                                        }
+                                }
+                                else {
+                                    // check if the existing tag is exists or not?
+                                    if(det.Tags[j] === this.jfTagValue) {
+                                        // this movie alreadyt got the tag
+                                        isTagExists = true;
+                                        break;
                                     }
                                 }
                             }
+                        }
 
-                            // check whether the filter is active or not?
-                            if(!this.getAllItems) {
-                                // if getAllItems filter is unchecked, then ensure that we will skip the records
-                                // that already got the tags.
-                                if(isTagExists) {
-                                    isSkipped = true;
-                                }
+                        // check whether the filter is active or not?
+                        if(!this.getAllItems) {
+                            // if getAllItems filter is unchecked, then ensure that we will skip the records
+                            // that already got the tags.
+                            if(isTagExists) {
+                                isSkipped = true;
                             }
+                        }
 
-                            // once we reach here, check whether this data need to be skipped or not?
-                            if(!(isSkipped)) {
-                                // data not being skipped
-                                // we will only going to bring below data to be displayed on the table
-                                // once got the data, populate the movielist with relevant data from the details
-                                // such as:
-                                // ProviderID (TMDB, and IMDB)
-                                // ProductionLocations
-                                providerIdTMDB = '';
-                                providerIdIMDB = '';
-                                rawProductionLocation = [];
-                                currentTags = [];
-                                uniqueTags = [];
-                                if (!(det===null)) {
-                                    if(!(typeof det.ProviderIds.Imdb === 'undefined')) {
-                                        providerIdIMDB = det.ProviderIds.Imdb;
-                                    }
-                                    if(!(typeof det.ProviderIds.Tmdb === 'undefined')) {
-                                        providerIdTMDB = det.ProviderIds.Tmdb;
-                                    }
-                                    if(!(typeof det.Tags === 'undefined')) {
-                                        currentTags = det.Tags;
-                                    }
-                                    // use the isTagExists that we checked above, we can determine the correct
-                                    // production location that we need to populate, either it cames from the current
-                                    // tag, or come from production locations fields from Jellyfin response.
-                                    if(isTagExists && currentTags.length > 0) {
-                                        // tags already exists, populate from current tags
-                                        for(j=0; j<currentTags.length; j++) {
-                                            if(this.jfTagType == 'countries') {
-                                                if(currentTags[j].substr(0,2) === "🌍") {
-                                                    rawProductionLocation.push(currentTags[j].trim());
-                                                }
-                                            }
-                                            else {
-                                                if(currentTags[j].trim() === this.jfTagValue) {
-                                                    rawProductionLocation.push(currentTags[j].trim());
-                                                }
-                                            }
-                                        }
-                                    }
-                                    else {
-                                        // tags is not yet exists, check if we need to populate from production location
-                                        // or user want to put static tags?
-                                        if(this.jfTagType === 'countries') {
-                                            // tags is not yet exists, populate from production location
-                                            if(!(typeof det.ProductionLocations === 'undefined')) {
-                                                // check if production locations more than 0
-                                                if(det.ProductionLocations.length > 0) {
-                                                    // loop thru all the production locations, and add 🌍
-                                                    for(j=0; j<det.ProductionLocations.length; j++) {
-                                                        rawProductionLocation.push('🌍 ' + det.ProductionLocations[j].trim())
-                                                    }
-                                                }
+                        // once we reach here, check whether this data need to be skipped or not?
+                        if(!(isSkipped)) {
+                            // data not being skipped
+                            // we will only going to bring below data to be displayed on the table
+                            // once got the data, populate the movielist with relevant data from the details
+                            // such as:
+                            // ProviderID (TMDB, and IMDB)
+                            // ProductionLocations
+                            providerIdTMDB = '';
+                            providerIdIMDB = '';
+                            rawProductionLocation = [];
+                            currentTags = [];
+                            uniqueTags = [];
+                            if (!(det===null)) {
+                                if(!(typeof det.ProviderIds.Imdb === 'undefined')) {
+                                    providerIdIMDB = det.ProviderIds.Imdb;
+                                }
+                                if(!(typeof det.ProviderIds.Tmdb === 'undefined')) {
+                                    providerIdTMDB = det.ProviderIds.Tmdb;
+                                }
+                                if(!(typeof det.Tags === 'undefined')) {
+                                    currentTags = det.Tags;
+                                }
+                                // use the isTagExists that we checked above, we can determine the correct
+                                // production location that we need to populate, either it cames from the current
+                                // tag, or come from production locations fields from Jellyfin response.
+                                if(isTagExists && currentTags.length > 0) {
+                                    // tags already exists, populate from current tags
+                                    for(j=0; j<currentTags.length; j++) {
+                                        if(this.jfTagType == 'countries') {
+                                            if(currentTags[j].substr(0,2) === "🌍") {
+                                                rawProductionLocation.push(currentTags[j].trim());
                                             }
                                         }
                                         else {
-                                            // get the tag from the static tag value
-                                            rawProductionLocation.push(this.jfTagValue);
+                                            if(currentTags[j].trim() === this.jfTagValue) {
+                                                rawProductionLocation.push(currentTags[j].trim());
+                                            }
                                         }
                                     }
                                 }
-                                // get the unique value from both of them and put on the unique tags
-                                for(j=0; j<currentTags.length; j++) {
-                                    if(!(rawProductionLocation.indexOf(currentTags[j]) !== -1)) {
-                                        // tags not exists, push this tag to the updatedTag
-                                        uniqueTags.push(currentTags[j]);
+                                else {
+                                    // tags is not yet exists, check if we need to populate from production location
+                                    // or user want to put static tags?
+                                    if(this.jfTagType === 'countries') {
+                                        // tags is not yet exists, populate from production location
+                                        if(!(typeof det.ProductionLocations === 'undefined')) {
+                                            // check if production locations more than 0
+                                            if(det.ProductionLocations.length > 0) {
+                                                // loop thru all the production locations, and add 🌍
+                                                for(j=0; j<det.ProductionLocations.length; j++) {
+                                                    rawProductionLocation.push('🌍 ' + det.ProductionLocations[j].trim())
+                                                }
+                                            }
+                                        }
+                                    }
+                                    else {
+                                        // get the tag from the static tag value
+                                        rawProductionLocation.push(this.jfTagValue);
                                     }
                                 }
-
-                                this.jfMovieList.push({
-                                    "tag_exist":isTagExists,
-                                    "name":res.data.Items[i].Name,
-                                    "id":res.data.Items[i].Id,
-                                    "tmdb":providerIdTMDB,
-                                    "imdb":providerIdIMDB,
-                                    "studio":[],
-                                    "country":rawProductionLocation,
-                                    "current_tags":currentTags,
-                                    "unique_tags":uniqueTags,
-                                });
+                            }
+                            // get the unique value from both of them and put on the unique tags
+                            for(j=0; j<currentTags.length; j++) {
+                                if(!(rawProductionLocation.indexOf(currentTags[j]) !== -1)) {
+                                    // tags not exists, push this tag to the updatedTag
+                                    uniqueTags.push(currentTags[j]);
+                                }
                             }
 
-                            // add the number of movie already scanned
-                            this.numMovieScanned++;
-                            // compute current progress
-                            this.currentProgress = (this.numMovieScanned / this.totalItem) * 100;
+                            this.jfMovieList.push({
+                                "tag_exist":isTagExists,
+                                "name":res[i].Name,
+                                "id":res[i].Id,
+                                "tmdb":providerIdTMDB,
+                                "imdb":providerIdIMDB,
+                                "studio":[],
+                                "country":rawProductionLocation,
+                                "current_tags":currentTags,
+                                "unique_tags":uniqueTags,
+                            });
                         }
-                        // all is finished
-                        // since we might be filter the movie list, then recalculate the total movie being
-                        // displayed, by counting the total record in jfMovieList.
-                        // in case no filter it will give the same result.
-                        this.totalItem = this.jfMovieList.length;
 
-                        // showed the log how log it take
-                        this.printlog('info', "Get Movie List from from " + this.jfFolder + " (" + this.jfParentID + ") end at " + Date().toString());
-                        return true;
+                        // add the number of movie already scanned
+                        this.numMovieScanned++;
+                        // compute current progress
+                        this.currentProgress = (this.numMovieScanned / this.totalItem) * 100;
                     }
-                    else {
-                        this.printlog('warn', "<getItemList> - No collection");
-                        this.showMsg("No collection found on Jellyfin", 'warning');
-                        return false;
-                    }
+                    // all is finished
+                    // since we might be filter the movie list, then recalculate the total movie being
+                    // displayed, by counting the total record in jfMovieList.
+                    // in case no filter it will give the same result.
+                    this.totalItem = this.jfMovieList.length;
+
+                    // showed the log how log it take
+                    this.printlog('info', "Get Movie List from from " + this.jfFolder + " (" + this.jfParentID + ") end at " + Date().toString());
+                    return true;
                 }
                 else {
-                    this.printlog('error', "<getItemList> - Error when connecting to Jellyfin with status: " + res.status);
-                    this.showMsg("Error when connecting to Jellyfin with status " + res.status, 'error');
+                    this.printlog('warn', "<getMovieList> - No collection");
+                    this.showMsg("No collection found on Jellyfin", 'warning');
                     return false;
                 }
             } catch (ex) {
-                this.printlog('error', "<getUserList> - " + ex);
+                this.printlog('error', "<getMovieList> - " + ex);
                 this.showMsg("Error when connecting to Jellyfin.\n" + ex, 'error');
                 return false;
             }
         },
+        /**
+         * getTVList
+         * This function will get list of TV series from Jellyfin Server.
+         * 
+         * The series will be put on the array and sorted based on the TV name before further processing.
+         * 
+         * End result of this function is to filled the Jellyfin Movie List variable that will be used as
+         * a reference for all the processing of this application.
+         * 
+         * Return:
+         * N/A
+         */
         async getTVList() {
             var urlMovieList = this.jfProto + this.jfURL + '/Items?UserId=' + this.jfUserID + '&ParentId=' + this.jfParentID;
             this.printlog('info', "Get TV List from from " + this.jfFolder + " (" + this.jfParentID + ") start at " + Date().toString());
@@ -854,149 +919,152 @@ export default {
                         // now loop thru all the items
                         for(i=0; i<res.data.Items.length; i++) {
                         //for(i=0; i<20; i++) {
-                            // initialize the isTagExists, isUnknownStudio, isStudioEmpty and isSkipped flag
-                            isTagExists = false;
-                            isUnknownStudio = false;
-                            isStudioEmpty = false;
-                            isSkipped = false;
+                            // ensure this is a Series
+                            if(res.data.Items[i].Type == "Series") {
+                                // initialize the isTagExists, isUnknownStudio, isStudioEmpty and isSkipped flag
+                                isTagExists = false;
+                                isUnknownStudio = false;
+                                isStudioEmpty = false;
+                                isSkipped = false;
 
-                            // get movie details
-                            det = await this.getItemDetails(res.data.Items[i].Id);
-                            
-                            // check if tags already exists or not?
-                            // this is will helpful later on when we want to populate the production locations.
-                            if(det.Tags.length > 0) {
-                                // got tag, now check what tags is already being put on the movie
-                                for(j=0; j<det.Tags.length; j++) {
-                                    // check the tag type
-                                    if(this.jfTagType === 'countries') {
-                                        // check the country tags
-                                        if(det.Tags[j].substr(0,2) === "🌍") {
-                                            // this tv already updated
-                                            isTagExists = true;
-                                            break;
-                                        }
-                                    }
-                                    else {
-                                        // check if the static tags is already put
-                                        if(det.Tags[j].trim() === this.jfTagValue) {
-                                            // this tv already got the tag
-                                            isTagExists = true;
-                                            break;
-                                        }
-                                    }
-                                }
-                            }
-
-                            // check whether the filter is active or not?
-                            if(!this.getAllItems) {
-                                // if getAllItems filter is unchecked, then ensure that we will skip the records
-                                // that already got the tags.
-                                if(isTagExists) {
-                                    isSkipped = true;
-                                }
-                            }
-
-                            // once we reach here, check whether this data need to be skipped or not?
-                            if(!(isSkipped)) {
-                                // data not being skipped
-                                // we will only going to bring below data to be displayed on the table
-                                // once got the data, populate the movielist with relevant data from the details
-                                // such as:
-                                // ProviderID (TMDB, and IMDB)
-                                // ProductionLocations
-                                providerIdTVDB = '';
-                                providerIdIMDB = '';
-                                rawProductionLocation = [];
-                                currentTags = [];
-                                uniqueTags = [];
-                                rawStudio = [];
-                                if (!(det===null)) {
-                                    if(!(typeof det.ProviderIds.Imdb === 'undefined')) {
-                                        providerIdIMDB = det.ProviderIds.Imdb;
-                                    }
-                                    if(!(typeof det.ProviderIds.Tvdb === 'undefined')) {
-                                        providerIdTVDB = det.ProviderIds.Tvdb;
-                                    }
-                                    if(!(typeof det.Tags === 'undefined')) {
-                                        currentTags = det.Tags;
-                                    }
-                                    // populate the studio name
-                                    for(j=0; j<det.Studios.length; j++) {
-                                        // get the name and check
-                                        rawStudio.push(det.Studios[j].Name);
-                                        // check if we got any unknown studio
-                                        if(this.getTVNetwork(det.Studios[j].Name) === '') {
-                                            isUnknownStudio = true;
-                                        }
-                                    }
-                                    if(rawStudio.length <= 0) {
-                                        isStudioEmpty = true;
-                                    }
-                                    // use the isTagExists that we checked above, we can determine the correct
-                                    // production location that we need to populate, either it cames from the current
-                                    // tag, or come from production locations fields from Jellyfin response.
-                                    if(isTagExists && currentTags.length > 0) {
-                                        // tags already exists, populate from current tags
-                                        for(j=0; j<currentTags.length; j++) {
-                                            if(this.jfTagType == 'countries') {
-                                                if(currentTags[j].substr(0,2) === "🌍") {
-                                                    rawProductionLocation.push(currentTags[j].trim());
-                                                }
-                                            }
-                                            else {
-                                                if(currentTags[j].trim() === this.jfTagValue) {
-                                                    rawProductionLocation.push(currentTags[j].trim());
-                                                }
-                                            }
-                                        }
-                                    }
-                                    else {
-                                        // check tag type
+                                // get movie details
+                                det = await this.getItemDetails(res.data.Items[i].Id);
+                                
+                                // check if tags already exists or not?
+                                // this is will helpful later on when we want to populate the production locations.
+                                if(det.Tags.length > 0) {
+                                    // got tag, now check what tags is already being put on the movie
+                                    for(j=0; j<det.Tags.length; j++) {
+                                        // check the tag type
                                         if(this.jfTagType === 'countries') {
-                                            // tags is not yet exists, populate from studios
-                                            if(!(typeof det.Studios === 'undefined')) {
-                                                // check if studios more than 0
-                                                if(det.Studios.length > 0) {
-                                                    // loop thru all studio to get the country
-                                                    for(j=0; j<det.Studios.length; j++) {
-                                                        // get the name and check
-                                                        currentStudio = this.getTVNetwork(det.Studios[j].Name);
-                                                        if(currentStudio !== '') {
-                                                            // check if current studio already in the rawProcutionLocation list
-                                                            if(!(rawProductionLocation.includes(currentStudio))) {
-                                                                rawProductionLocation.push('🌍 ' + currentStudio);
-                                                            }
-                                                        }
+                                            // check the country tags
+                                            if(det.Tags[j].substr(0,2) === "🌍") {
+                                                // this tv already updated
+                                                isTagExists = true;
+                                                break;
+                                            }
+                                        }
+                                        else {
+                                            // check if the static tags is already put
+                                            if(det.Tags[j].trim() === this.jfTagValue) {
+                                                // this tv already got the tag
+                                                isTagExists = true;
+                                                break;
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // check whether the filter is active or not?
+                                if(!this.getAllItems) {
+                                    // if getAllItems filter is unchecked, then ensure that we will skip the records
+                                    // that already got the tags.
+                                    if(isTagExists) {
+                                        isSkipped = true;
+                                    }
+                                }
+
+                                // once we reach here, check whether this data need to be skipped or not?
+                                if(!(isSkipped)) {
+                                    // data not being skipped
+                                    // we will only going to bring below data to be displayed on the table
+                                    // once got the data, populate the movielist with relevant data from the details
+                                    // such as:
+                                    // ProviderID (TMDB, and IMDB)
+                                    // ProductionLocations
+                                    providerIdTVDB = '';
+                                    providerIdIMDB = '';
+                                    rawProductionLocation = [];
+                                    currentTags = [];
+                                    uniqueTags = [];
+                                    rawStudio = [];
+                                    if (!(det===null)) {
+                                        if(!(typeof det.ProviderIds.Imdb === 'undefined')) {
+                                            providerIdIMDB = det.ProviderIds.Imdb;
+                                        }
+                                        if(!(typeof det.ProviderIds.Tvdb === 'undefined')) {
+                                            providerIdTVDB = det.ProviderIds.Tvdb;
+                                        }
+                                        if(!(typeof det.Tags === 'undefined')) {
+                                            currentTags = det.Tags;
+                                        }
+                                        // populate the studio name
+                                        for(j=0; j<det.Studios.length; j++) {
+                                            // get the name and check
+                                            rawStudio.push(det.Studios[j].Name);
+                                            // check if we got any unknown studio
+                                            if(this.getTVNetwork(det.Studios[j].Name) === '') {
+                                                isUnknownStudio = true;
+                                            }
+                                        }
+                                        if(rawStudio.length <= 0) {
+                                            isStudioEmpty = true;
+                                        }
+                                        // use the isTagExists that we checked above, we can determine the correct
+                                        // production location that we need to populate, either it cames from the current
+                                        // tag, or come from production locations fields from Jellyfin response.
+                                        if(isTagExists && currentTags.length > 0) {
+                                            // tags already exists, populate from current tags
+                                            for(j=0; j<currentTags.length; j++) {
+                                                if(this.jfTagType == 'countries') {
+                                                    if(currentTags[j].substr(0,2) === "🌍") {
+                                                        rawProductionLocation.push(currentTags[j].trim());
+                                                    }
+                                                }
+                                                else {
+                                                    if(currentTags[j].trim() === this.jfTagValue) {
+                                                        rawProductionLocation.push(currentTags[j].trim());
                                                     }
                                                 }
                                             }
                                         }
                                         else {
-                                            rawProductionLocation.push(this.jfTagValue);
+                                            // check tag type
+                                            if(this.jfTagType === 'countries') {
+                                                // tags is not yet exists, populate from studios
+                                                if(!(typeof det.Studios === 'undefined')) {
+                                                    // check if studios more than 0
+                                                    if(det.Studios.length > 0) {
+                                                        // loop thru all studio to get the country
+                                                        for(j=0; j<det.Studios.length; j++) {
+                                                            // get the name and check
+                                                            currentStudio = this.getTVNetwork(det.Studios[j].Name);
+                                                            if(currentStudio !== '') {
+                                                                // check if current studio already in the rawProcutionLocation list
+                                                                if(!(rawProductionLocation.includes(currentStudio))) {
+                                                                    rawProductionLocation.push('🌍 ' + currentStudio);
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            else {
+                                                rawProductionLocation.push(this.jfTagValue);
+                                            }
                                         }
                                     }
-                                }
-                                // get the unique value from both of them and put on the unique tags
-                                for(j=0; j<currentTags.length; j++) {
-                                    if(!(rawProductionLocation.indexOf(currentTags[j]) !== -1)) {
-                                        // tags not exists, push this tag to the updatedTag
-                                        uniqueTags.push(currentTags[j]);
+                                    // get the unique value from both of them and put on the unique tags
+                                    for(j=0; j<currentTags.length; j++) {
+                                        if(!(rawProductionLocation.indexOf(currentTags[j]) !== -1)) {
+                                            // tags not exists, push this tag to the updatedTag
+                                            uniqueTags.push(currentTags[j]);
+                                        }
                                     }
+                                    this.jfMovieList.push({
+                                        "tag_exist":isTagExists,
+                                        "studio_empty":isStudioEmpty,
+                                        "unknown_studio":isUnknownStudio,
+                                        "name":res.data.Items[i].Name,
+                                        "id":res.data.Items[i].Id,
+                                        "tmdb":providerIdTVDB,
+                                        "imdb":providerIdIMDB,
+                                        "studio":rawStudio,
+                                        "country":rawProductionLocation,
+                                        "current_tags":currentTags,
+                                        "unique_tags":uniqueTags
+                                    });
                                 }
-                                this.jfMovieList.push({
-                                    "tag_exist":isTagExists,
-                                    "studio_empty":isStudioEmpty,
-                                    "unknown_studio":isUnknownStudio,
-                                    "name":res.data.Items[i].Name,
-                                    "id":res.data.Items[i].Id,
-                                    "tmdb":providerIdTVDB,
-                                    "imdb":providerIdIMDB,
-                                    "studio":rawStudio,
-                                    "country":rawProductionLocation,
-                                    "current_tags":currentTags,
-                                    "unique_tags":uniqueTags
-                                });
                             }
 
                             // add the number of movie already scanned
@@ -1278,11 +1346,11 @@ export default {
                     }
                     else {
                         // something isn't right
-                        this.printlog('error', "<updateMetadata> Error when updating (" + movDetail.Name + ") with ID (" + movDetail.Id + "). HTTP Status: " + postMetadata.status);
+                        this.printlog('error', "<updateMetadataMovie> Error when updating (" + movDetail.Name + ") with ID (" + movDetail.Id + "). HTTP Status: " + postMetadata.status);
                         if(conf) { this.showMsg("Error when Updating Metadata.\nHTTP Status " + postMetadata.status, 'error'); }
                     }
                 } catch(ex) {
-                    this.printlog('error', "<updateMetadata> - " + ex);
+                    this.printlog('error', "<updateMetadataMovie> - " + ex);
                     if(conf) { this.showMsg("Error when Updating Metadata.\n" + ex, 'error'); }
                 }
 
@@ -1291,6 +1359,26 @@ export default {
             // if confirm is true, set back the isFetchingMetadata into false
             if(conf) { this.isUpdateMetadata = false; }
         },
+        /**
+         * updateMetadataTV
+         * This function is to format the body and post the metadata update to Jellyfin API.
+         * 
+         * For the basic information, we will get the details of the movie as reference value, before we perform
+         * any update on the movie.
+         * 
+         * Here all the country tags that need to be put will be also formatted and created here.
+         * 
+         * For any data that doesn't have any countries, the update post will be skipped to save IO.
+         * 
+         * Params:
+         * - idx  : Index of the movie on the Jellyfin Movie List parameter
+         * - conf : confirmation enable or not? This is due this function can be called individually
+         *          or thru update all metadata button. So we shouldn't ask any confirmation to user
+         *          if user access this function thru Update Tag button.
+         * 
+         * Return:
+         * N/A
+         */
         async updateMetadataTV(idx, conf) {
             var index = this.getIndex(idx);
 
@@ -1412,11 +1500,11 @@ export default {
                     }
                     else {
                         // something isn't right
-                        this.printlog('error', "<updateMetadata> Error when updating (" + tvDetail.Name + ") with ID (" + tvDetail.Id + "). HTTP Status: " + postMetadata.status);
+                        this.printlog('error', "<updateMetadataTV> Error when updating (" + tvDetail.Name + ") with ID (" + tvDetail.Id + "). HTTP Status: " + postMetadata.status);
                         if(conf) { this.showMsg("Error when Updating Metadata.\nHTTP Status " + postMetadata.status, 'error'); }
                     }
                 } catch(ex) {
-                    this.printlog('error', "<updateMetadata> - " + ex);
+                    this.printlog('error', "<updateMetadataTV> - " + ex);
                     if(conf) { this.showMsg("Error when Updating Metadata.\n" + ex, 'error'); }
                 }
 
@@ -1425,6 +1513,10 @@ export default {
             // if confirm is true, set back the isFetchingMetadata into false
             if(conf) { this.isUpdateMetadata = false; }
         },
+        /**
+         * forceRefresh
+         * this function will perform refresh the data from TMDB (for Movies) and TVDB (for TV).
+         */
         forceRefresh() {
             // here we will call either forceRefreshTMDB or the forceRefreshTheTVDB
             if(this.folderType === 'movies') {
@@ -1475,7 +1567,22 @@ export default {
             // once done reset back the fetching status into false
             this.isFetchingTMDB = false;
         },
+        /**
+         * forceRefreshTVDB
+         * This function will perform TVDB API call to all movie metadata that loaded by the tools.
+         * 
+         * Since we will access external sites, the program will perform 0.5s delay for each API call
+         * to prevent hammering on TVDB server.
+         * 
+         * Return:
+         * N/A
+         */
         async forceRefreshTVDB() {
+            // -- NOT IMPLEMENTED --
+            this.showMsg("Feature not yet implemented.\n", 'error');
+            return;
+
+            /* -- REMOVE THIS WHEN ALREADY IMPLEMENTED ---
             const sleep = m => new Promise(r => setTimeout(r, m));
 
             // since will refresh A LOT of data, ensure to ask first user, that they
@@ -1505,6 +1612,7 @@ export default {
 
             // once done reset back the fetching status into false
             this.isFetchingTMDB = false;
+            -- REMOVE THIS WHEN ALREADY IMPLEMENTED --- */
         },
         /**
          * fetchTMDB

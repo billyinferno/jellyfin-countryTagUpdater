@@ -1161,6 +1161,7 @@ const tv_network_lists = {
     "Tokyo MX": "Japan",
     "Toon Disney": "United States of America",
     "Total Variety Network": "South Korea",
+    "Total Variety Network (tvN)": "South Korea",
     "Tou.tv": "Canada",
     "Toute l'histoire": "France",
     "TQS": "Canada",
