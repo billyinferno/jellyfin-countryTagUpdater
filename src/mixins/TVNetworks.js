@@ -757,6 +757,7 @@ const tv_network_lists = {
     "NickToons": "United States of America",
     "Niconico": "Japan",
     "Nine Network": "Australia",
+    "Nippon TV": "Japan",
     "Nitro": "Germany",
     "NoA": "France",
     "Noggin": "United States of America",
